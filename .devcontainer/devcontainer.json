@@ -1,0 +1,17 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.245.2/containers/rustap
+{
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "extensions": [
+    "ocamllabs.ocaml-platform"
+  ],
+  "postStartCommand": "eval $(opam env --switch=default)",
+  // Use 'forwardPorts' to make a list of ports inside the container aevailable locally.
+  // "forwardPorts": [],
+  // Use 'postCreateCommand' to run commands after the container is created.
+  // "postCreateCommand": "rustc --version",
+  // Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+  "remoteUser": "root"
+}
