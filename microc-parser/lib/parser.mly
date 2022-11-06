@@ -3,10 +3,10 @@
 */
 
 %{
-     (* Auxiliary definitions *)
-     type vardesc_desc = VarDescStar | VarDescParens | VarDescArr of int option;;
+  (* Auxiliary definitions *)
+  type vardesc_desc = VarDescStar | VarDescParens | VarDescArr of int option;;
 
-    let (|@|) node loc = { Ast.node = node; Ast.loc = loc }
+  let (|@|) node loc = { Ast.node = node; Ast.loc = loc }
 %}
 
 /* Tokens declarations */
@@ -47,10 +47,18 @@ program:
   ;
 
 topdecl:
-  | vardecl SEMICOLON
-    { Ast.Vardec(fst $1, snd $1) |@| (Location.to_code_position $loc) }
+  | vardecl_sem
+    { 
+      let (t, id, loc) = $1 in
+      Ast.Vardec(t, id) |@| loc
+    }
   | fundecl
     { Ast.Fundecl($1) |@| (Location.to_code_position $loc) }
+  ;
+
+vardecl_sem:
+  | vardecl SEMICOLON
+    { (fst $1, snd $1, Location.to_code_position $loc) }
   ;
 
 (* TODO: solo un void o un array di void non è okay, un array di puntatori a void si, un puntatore ad un array di void no, un puntatore a void si, un array di puntatori a void si, quando ok usare [] *)
@@ -64,7 +72,7 @@ vardecl:
           | VarDescArr oi -> Ast.TypA (t, oi)
       in
       let tt = List.fold_left ftvd $1 (snd $2)
-      in (tt,  fst $2)
+      in (tt, fst $2)
     }
   ;
 
@@ -106,6 +114,10 @@ fundecl:
 
 (* TODO *)
 block:
-  | LEFT_CURLY RIGHT_CURLY
-    { Ast.Block [] |@| (Location.to_code_position $loc) }
+  | LEFT_CURLY list(vardecl_sem) RIGHT_CURLY
+    { 
+      let stmtordec_node_list = List.map (fun (t, id, loc) -> (Ast.Dec(t, id), loc)) $2 in
+      let stmtordec_list = List.map (fun (dec, loc) -> dec |@| loc) stmtordec_node_list in
+      Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
+    }
   ;
