@@ -64,6 +64,8 @@ rule next_token = parse
       | _ -> failwith "the impossible happened"
     in BOOL vbool
   }
+| ','
+  { COMMA }
 | ';'
   { SEMICOLON }
 | '*'
@@ -76,6 +78,10 @@ rule next_token = parse
   { LEFT_BRACKET }
 | ']'
   { RIGHT_BRACKET }
+| '{'
+  { LEFT_CURLY }
+| '}'
+  { RIGHT_CURLY }
 | "//" [^ '\n']*  (* eat up one-line comments *)
 | [' ' '\t']  (* eat up whitespaces *)
   {

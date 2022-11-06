@@ -18,7 +18,7 @@ type uop = Neg | Not [@@deriving show]
 type identifier = string [@@deriving show]
 
 type 'a annotated_node = {
-  loc : Location.code_pos; (* [@opaque] *)
+  loc : Location.code_pos; (* TODO: [@opaque] *)
   node : 'a;
 }
 [@@deriving show]

@@ -20,6 +20,8 @@
 %token STAR
 %token LEFT_PAREN RIGHT_PAREN
 %token LEFT_BRACKET RIGHT_BRACKET
+%token LEFT_CURLY RIGHT_CURLY
+%token COMMA
 
 
 %token EOF
@@ -40,43 +42,70 @@
 /* Grammar specification */
 
 program:
-  | list(topdecl) EOF                           { Ast.Prog($1) }
+  | list(topdecl) EOF 
+    { Ast.Prog($1) }
   ;
 
-(*TODO: non usare i node diretti ma la versione annotata con la posizione, capire come usare le posizioni dalle slide *)
 topdecl:
-  | vardecl SEMICOLON                           { $1 |@| (Location.to_code_position $loc) }
-  (* TODO: Fundecl *)
+  | vardecl SEMICOLON
+    { Ast.Vardec(fst $1, snd $1) |@| (Location.to_code_position $loc) }
+  | fundecl
+    { Ast.Fundecl($1) |@| (Location.to_code_position $loc) }
   ;
 
-(*TODO: non usare i node diretti ma la versione annotata con la posizione, capire come usare le posizioni dalle slide *)
 (* TODO: solo un void o un array di void non è okay, un array di puntatori a void si, un puntatore ad un array di void no, un puntatore a void si, un array di puntatori a void si, quando ok usare [] *)
 vardecl:
-  | typ vardesc                                 { 
-                                                  let ftvd t vd = match vd with
-                                                                    | VarDescStar -> Ast.TypP t
-                                                                    | VarDescParens -> t
-                                                                    | VarDescArr oi -> Ast.TypA (t, oi)
-                                                  in
-                                                  let tt = List.fold_left ftvd $1 (snd $2)
-                                                  in Ast.Vardec(tt,  fst $2)
-                                                }
+  | typ vardesc
+    { 
+      let ftvd t vd = 
+        match vd with
+          | VarDescStar -> Ast.TypP t
+          | VarDescParens -> t
+          | VarDescArr oi -> Ast.TypA (t, oi)
+      in
+      let tt = List.fold_left ftvd $1 (snd $2)
+      in (tt,  fst $2)
+    }
   ;
 
 typ:
-  | INT_T                                         { Ast.TypI }
-  | CHAR_T                                        { Ast.TypC }
-  | BOOL_T                                        { Ast.TypB }
-  | VOID_T                                        { Ast.TypV }
+  | INT_T
+    { Ast.TypI }
+  | CHAR_T
+    { Ast.TypC }
+  | BOOL_T
+    { Ast.TypB }
+  | VOID_T
+    { Ast.TypV }
   ;
 
 vardesc:
-  | ID                                          { ($1, []) }
-  | STAR vardesc                                { (fst $2, VarDescStar :: snd $2) }
-  | LEFT_PAREN vardesc RIGHT_PAREN              { (fst $2, VarDescParens :: snd $2) }
-  | vardesc LEFT_BRACKET RIGHT_BRACKET          { (fst $1, VarDescArr None :: snd $1) }
-  | vardesc LEFT_BRACKET INT RIGHT_BRACKET      { (fst $1, VarDescArr (Some $3) :: snd $1) }
+  | ID
+    { ($1, []) }
+  | STAR vardesc
+    { (fst $2, VarDescStar :: snd $2) }
+  | LEFT_PAREN vardesc RIGHT_PAREN
+    { (fst $2, VarDescParens :: snd $2) }
+  | vardesc LEFT_BRACKET RIGHT_BRACKET
+    { (fst $1, VarDescArr None :: snd $1) }
+  | vardesc LEFT_BRACKET INT RIGHT_BRACKET
+    { (fst $1, VarDescArr (Some $3) :: snd $1) }
   ;
 
-(* INT_T STAR LEFT_PAREN STAR ID RIGHT_PAREN LEFT_BRACKET INT RIGHT_BRACKET SEMICOLON *)
-(* INT_T STAR STAR ID LEFT_BRACKET INT RIGHT_BRACKET SEMICOLON *)
+fundecl:
+  | typ ID LEFT_PAREN separated_list(COMMA, vardecl) RIGHT_PAREN block                      
+    {
+      {
+        Ast.typ = $1;
+        Ast.fname = $2;
+        Ast.formals = $4;
+        Ast.body = $6;
+      } 
+    }
+  ;
+
+(* TODO *)
+block:
+  | LEFT_CURLY RIGHT_CURLY
+    { Ast.Block [] |@| (Location.to_code_position $loc) }
+  ;

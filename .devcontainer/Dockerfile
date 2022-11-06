@@ -6,7 +6,7 @@ FROM arm64v8/ubuntu:latest
 RUN apt update -y && apt install -y software-properties-common
 RUN add-apt-repository ppa:avsm/ppa
 RUN apt install -y ocaml opam python3 cmake llvm llvm-14-dev
-RUN opam init --auto-setup --yes --bare --disable-sandboxing
+RUN opam init --auto-setup --yes
 RUN opam install ocaml-lsp-server -y
 RUN opam install ocamlformat -y
 RUN opam install menhir -y

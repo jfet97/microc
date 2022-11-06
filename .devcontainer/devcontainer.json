@@ -5,9 +5,10 @@
     "dockerfile": "Dockerfile"
   },
   "extensions": [
-    "ocamllabs.ocaml-platform"
+    "ocamllabs.ocaml-platform",
+    "gruntfuggly.todo-tree"
   ],
-  "postStartCommand": "eval $(opam env --switch=default)",
+  "postCreateCommand": "cd microc-parser && make deps",
   // Use 'forwardPorts' to make a list of ports inside the container aevailable locally.
   // "forwardPorts": [],
   // Use 'postCreateCommand' to run commands after the container is created.
