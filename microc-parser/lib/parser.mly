@@ -3,6 +3,7 @@
 */
 
 %{
+
   (* Auxiliary definitions *)
   type vardesc_desc = VarDescStar | VarDescParens | VarDescArr of int option;;
 
@@ -11,13 +12,15 @@
 
 /* Tokens declarations */
 %token <int> INT
+%token <char> CHAR
 %token <bool> BOOL
+%token NULL
 %token <string> ID
 
 %token SEMICOLON
 %token INT_T CHAR_T BOOL_T VOID_T
 
-%token STAR
+%token STAR AMPERSAND
 %token LEFT_PAREN RIGHT_PAREN
 %token LEFT_BRACKET RIGHT_BRACKET
 %token LEFT_CURLY RIGHT_CURLY
@@ -30,6 +33,7 @@
 /* Precedence and associativity specification */
 
 %left STAR
+%nonassoc AMPERSAND
 %nonassoc LEFT_BRACKET
 
 
@@ -152,12 +156,17 @@ expr:
   (* | rexpr
     { $2 } *)
 
+(* otherwise it's unclear when take the reduction lexpr_access -> lexpr *)
+(* e.g. `STAR lexpr` becomes `STAR lexpr_access` vs wait for a possible LEFT_BRACKET, so that the reduction is post-poned *)
+(* the precedence of LEFT_BRACKET over STAR does not apply here because the intention is not to reduce *)
+(* `STAR lexpr` as a whole, but only the `lexpr` inside it *)
 %inline lexpr_access:
   | lexpr
     { 
       let loc =  Location.to_code_position $loc in
       Ast.Access($1) |@| loc
     }
+  ;
 
 lexpr:
   | ID
@@ -172,10 +181,43 @@ lexpr:
       let loc = Location.to_code_position $loc in
       Ast.AccDeref($2) |@| loc
     }
-  (* TODO: | "*" AExpr *)
+  | STAR aexpr
+    {
+      let loc = Location.to_code_position $loc in
+      Ast.AccDeref($2) |@| loc   
+    }
   | lexpr LEFT_BRACKET expr RIGHT_BRACKET
     {
       let loc = Location.to_code_position $loc in
       Ast.AccIndex($1, $3) |@| loc
     }
-(* ::= ID | "(" LExpr ")" | "*" LExpr | "*" AExpr | LExpr "[" Expr "]" *)
+  ;
+
+aexpr: 
+  | INT
+    {
+      let loc = Location.to_code_position $loc in 
+      Ast.ILiteral($1) |@| loc
+    }
+  | CHAR
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.CLiteral($1) |@| loc 
+    }
+  | BOOL
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.BLiteral($1) |@| loc 
+    }
+  | NULL
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.ILiteral(0) |@| loc 
+    }
+  | AMPERSAND lexpr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Addr($2) |@| loc
+    }
+  ;
+(* AExpr ::= INT | CHAR | BOOL | "NULL" | "(" RExpr ")" | "&" LExpr *)

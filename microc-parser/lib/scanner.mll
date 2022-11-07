@@ -72,6 +72,8 @@ rule next_token = parse
   { SEMICOLON }
 | '*'
   { STAR }
+| '&'
+  { AMPERSAND }
 | '('
   { LEFT_PAREN }
 | ')'
