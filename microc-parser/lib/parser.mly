@@ -147,7 +147,7 @@ block_entry:
       Option.map (fun sm -> (Ast.Stmt(sm) |@| sm.Ast.loc)) $1
     }
 
-(* TODO: supportare Expr *)
+(* TODO: finire *)
 stmt:
   | RETURN option(expr) SEMICOLON
     { Some (Ast.Return($2) |@| Location.to_code_position $loc) }
@@ -231,7 +231,7 @@ aexpr:
       let loc = Location.to_code_position $loc in
       Ast.Addr($2) |@| loc
     }
-  |  LEFT_PAREN rexpr RIGHT_PAREN
+  | LEFT_PAREN rexpr RIGHT_PAREN
     {
       let loc = Location.to_code_position $loc in
       $2.Ast.node |@| loc
@@ -256,6 +256,7 @@ rexpr:
       let loc = Location.to_code_position $loc in
       Ast.UnaryOp($1, $2) |@| loc
     }
+    (* TODO: ID "(" ((Expr ",")* Expr)? ")" *)
 
 %inline binop:
   | ADD
