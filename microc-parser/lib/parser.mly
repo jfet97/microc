@@ -22,6 +22,7 @@
 %token LEFT_BRACKET RIGHT_BRACKET
 %token LEFT_CURLY RIGHT_CURLY
 %token COMMA
+%token RETURN
 
 
 %token EOF
@@ -120,4 +121,24 @@ block:
       let stmtordec_list = List.map (fun (dec, loc) -> dec |@| loc) stmtordec_node_list in
       Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
     }
+    (* to avoid reduce/reduce conflicts in case of an empty block {} *)
+  | LEFT_CURLY nonempty_list(stmt) RIGHT_CURLY 
+    { 
+      let stmtordec_node_opt_list = List.fold_right (fun c a -> match c with
+                                                      | None -> a
+                                                      | Some(s) -> s :: a) $2 [] in
+      let stmtordec_node_list = List.map (fun sm -> Ast.Stmt(sm), sm.Ast.loc) stmtordec_node_opt_list in
+      let stmtordec_list = List.map (fun (st, loc) -> st |@| loc) stmtordec_node_list in
+      Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
+    } 
+  ;
+
+(* TODO: supportare Expr *)
+stmt:
+  | RETURN (* optional(Expr) *) SEMICOLON
+    { Some (Ast.Return(None) |@| Location.to_code_position $loc) }
+  | SEMICOLON 
+    { None }
+  | block
+    { Some $1 }
   ;

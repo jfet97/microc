@@ -68,7 +68,7 @@ and stmtordec = stmtordec_node annotated_node
 
 and stmtordec_node =
   | Dec of typ * identifier (* Local variable declaration  *)
-  | Stmt of stmt (* A statement   *)
+  | Stmt of stmt (* A statement *)
 [@@deriving show]
 
 type fun_decl = {

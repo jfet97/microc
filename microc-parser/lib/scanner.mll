@@ -15,9 +15,9 @@
       (* ("if", IF);
       ("else", ELSE);
       ("function", FUNCTION);
-      ("return", RETURN);
       ("for", FOR);
       ("while", WHILE); *)
+      ("return", RETURN);
       ("int", INT_T);
       ("bool", BOOL_T);
       ("char", CHAR_T);
@@ -35,6 +35,8 @@ let num_base10 = ('-'? one_to_nine digit_base10*) | '0'
 let num_base16 = ('-'? "0x" one_to_f digit_base16) | "0x0"
 let id = ['_' 'a'-'z' 'A'-'Z']['_' 'a'-'z' 'A'-'Z' '0'-'9']*
 let boolean = "true" | "false"
+
+let newline = ['\r' '\n'] | "\r\n"
 
 (* Scanner specification *)
 
@@ -82,12 +84,12 @@ rule next_token = parse
   { LEFT_CURLY }
 | '}'
   { RIGHT_CURLY }
-| "//" [^ '\n']*  (* eat up one-line comments *)
+| "//" [^ '\n']*  (* eat up one-line comments: enhance *)
 | [' ' '\t']  (* eat up whitespaces *)
   {
     next_token lexbuf
   }
-| ['\r' '\n'] | "\r\n"
+| newline
   {
     (* eat up newlines, increase line number *)
     Lexing.new_line lexbuf;

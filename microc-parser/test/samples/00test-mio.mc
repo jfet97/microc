@@ -8,3 +8,10 @@ int funzione(int* a, int b[10]) {
 }
 
 int funzione(int* a, int b[10], void ceh) {} // :(
+
+void funzione(int* a, int b[10], void ceh) {
+  ;;;;;;;;;;
+  {}
+  {;;;;;;;}
+  ;;;;;{;;;;;;;;;;;}
+} 
