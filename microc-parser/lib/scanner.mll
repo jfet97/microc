@@ -15,8 +15,8 @@
       (* ("if", IF);
       ("else", ELSE);
       ("function", FUNCTION);
-      ("for", FOR);
-      ("while", WHILE); *)
+      ("for", FOR); *)
+      ("while", WHILE);
       ("return", RETURN);
       ("int", INT_T);
       ("bool", BOOL_T);
@@ -84,7 +84,7 @@ rule next_token = parse
   { LEFT_CURLY }
 | '}'
   { RIGHT_CURLY }
-| "//" [^ '\n']*  (* eat up one-line comments: enhance *)
+| "//" [^ '\n']*  (* eat up one-line comments, TODO: enhance to support all ways to andare a capo *)
 | [' ' '\t']  (* eat up whitespaces *)
   {
     next_token lexbuf
@@ -100,6 +100,6 @@ rule next_token = parse
     let err_msg = sprintf "Unrecognized character: %c --- " c in
     let pos = Location.to_lexeme_position lexbuf in
     raise (Lexing_error (pos, err_msg))
-}
+  }
 | eof
   { EOF }

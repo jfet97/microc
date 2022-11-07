@@ -14,4 +14,6 @@ void funzione(int* a, int b[10], void ceh) {
   {}
   {;;;;;;;}
   ;;;;;{;;;;;;;;;;;}
+
+  return *d[u];
 } 

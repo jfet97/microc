@@ -23,6 +23,7 @@
 %token LEFT_CURLY RIGHT_CURLY
 %token COMMA
 %token RETURN
+%token WHILE
 
 
 %token EOF
@@ -135,10 +136,46 @@ block:
 
 (* TODO: supportare Expr *)
 stmt:
-  | RETURN (* optional(Expr) *) SEMICOLON
-    { Some (Ast.Return(None) |@| Location.to_code_position $loc) }
+  | RETURN option(expr) SEMICOLON
+    { Some (Ast.Return($2) |@| Location.to_code_position $loc) }
   | SEMICOLON 
     { None }
   | block
     { Some $1 }
+  (*| WHILE LEFT_PAREN (* optional(Expr) *) RIGHT_PAREN stmt
+    { SOME (AST.While($3, $5) )} *)
   ;
+
+expr:
+  | lexpr_access
+    { $1 }
+  (* | rexpr
+    { $2 } *)
+
+%inline lexpr_access:
+  | lexpr
+    { 
+      let loc =  Location.to_code_position $loc in
+      Ast.Access($1) |@| loc
+    }
+
+lexpr:
+  | ID
+    { 
+      let loc =  Location.to_code_position $loc in
+      Ast.AccVar($1) |@| loc
+    }
+  | LEFT_PAREN lexpr RIGHT_PAREN
+    { $2 }
+  | STAR lexpr_access
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.AccDeref($2) |@| loc
+    }
+  (* TODO: | "*" AExpr *)
+  | lexpr LEFT_BRACKET expr RIGHT_BRACKET
+    {
+      let loc = Location.to_code_position $loc in
+      Ast.AccIndex($1, $3) |@| loc
+    }
+(* ::= ID | "(" LExpr ")" | "*" LExpr | "*" AExpr | LExpr "[" Expr "]" *)
