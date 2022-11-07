@@ -17,25 +17,32 @@
 %token NULL
 %token <string> ID
 
-%token SEMICOLON
+%token COMMA SEMICOLON
 %token INT_T CHAR_T BOOL_T VOID_T
 
+%token ASSIGN
+%token ADD SUB DIV MOD
 %token STAR AMPERSAND
+%token AND OR NOT
+%token EQUAL NEQ LESS GREATER LEQ GEQ
 %token LEFT_PAREN RIGHT_PAREN
 %token LEFT_BRACKET RIGHT_BRACKET
 %token LEFT_CURLY RIGHT_CURLY
-%token COMMA
 %token RETURN
 %token WHILE
-
 
 %token EOF
 /* Precedence and associativity specification */
 
-%left STAR
-%nonassoc AMPERSAND
+%right ASSIGN
+%left OR
+%left AND
+%left EQUAL NEQ
+%nonassoc LESS GREATER LEQ GEQ
+%left ADD SUB
+%left STAR DIV MOD 
+%nonassoc NOT AMPERSAND
 %nonassoc LEFT_BRACKET
-
 
 /* Starting symbol */
 
@@ -120,30 +127,35 @@ fundecl:
 
 (* TODO *)
 block:
-  | LEFT_CURLY list(vardecl_sem) RIGHT_CURLY
+  | LEFT_CURLY list(block_entry) RIGHT_CURLY
     { 
-      let stmtordec_node_list = List.map (fun (t, id, loc) -> (Ast.Dec(t, id), loc)) $2 in
-      let stmtordec_list = List.map (fun (dec, loc) -> dec |@| loc) stmtordec_node_list in
+      let stmtordec_list = List.fold_right (fun o a -> match o with
+                                                      | None -> a
+                                                      | Some(sod) -> sod :: a) $2 [] in
       Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
     }
-    (* to avoid reduce/reduce conflicts in case of an empty block {} *)
-  | LEFT_CURLY nonempty_list(stmt) RIGHT_CURLY 
-    { 
-      let stmtordec_node_opt_list = List.fold_right (fun c a -> match c with
-                                                      | None -> a
-                                                      | Some(s) -> s :: a) $2 [] in
-      let stmtordec_node_list = List.map (fun sm -> Ast.Stmt(sm), sm.Ast.loc) stmtordec_node_opt_list in
-      let stmtordec_list = List.map (fun (st, loc) -> st |@| loc) stmtordec_node_list in
-      Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
-    } 
   ;
+
+block_entry:
+  | vardecl_sem
+    { 
+      let (t, id, loc) = $1 in
+      Some(Ast.Dec(t, id) |@| loc)
+    }
+  | stmt
+    {
+      Option.map (fun sm -> (Ast.Stmt(sm) |@| sm.Ast.loc)) $1
+    }
 
 (* TODO: supportare Expr *)
 stmt:
   | RETURN option(expr) SEMICOLON
     { Some (Ast.Return($2) |@| Location.to_code_position $loc) }
-  | SEMICOLON 
-    { None }
+  | option(expr) SEMICOLON 
+    { 
+      let loc = Location.to_code_position $loc in
+      Option.map (fun ex -> (Ast.Expr(ex) |@| loc)) $1
+    }
   | block
     { Some $1 }
   (*| WHILE LEFT_PAREN (* optional(Expr) *) RIGHT_PAREN stmt
@@ -153,8 +165,8 @@ stmt:
 expr:
   | lexpr_access
     { $1 }
-  (* | rexpr
-    { $2 } *)
+  | rexpr
+    { $1 }
 
 (* otherwise it's unclear when take the reduction lexpr_access -> lexpr *)
 (* e.g. `STAR lexpr` becomes `STAR lexpr_access` vs wait for a possible LEFT_BRACKET, so that the reduction is post-poned *)
@@ -219,5 +231,63 @@ aexpr:
       let loc = Location.to_code_position $loc in
       Ast.Addr($2) |@| loc
     }
+  |  LEFT_PAREN rexpr RIGHT_PAREN
+    {
+      let loc = Location.to_code_position $loc in
+      $2.Ast.node |@| loc
+    }
   ;
-(* AExpr ::= INT | CHAR | BOOL | "NULL" | "(" RExpr ")" | "&" LExpr *)
+
+rexpr:
+  | aexpr
+    { $1 }
+  | lexpr ASSIGN expr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, $3) |@| loc
+    }
+  | expr binop expr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.BinaryOp($2, $1, $3) |@| loc
+    }
+  | uop expr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.UnaryOp($1, $2) |@| loc
+    }
+
+%inline binop:
+  | ADD
+    { Ast.Add }
+  | SUB
+    { Ast.Sub }
+  | STAR
+    { Ast.Mult }
+  | MOD
+    { Ast.Mod }
+  | DIV
+    { Ast.Div }
+  | AND
+    { Ast.And }
+  | OR
+    { Ast.Or }
+  | LESS
+    { Ast.Less }
+  | GREATER
+    { Ast.Greater }
+  | LEQ
+    { Ast.Leq }
+  | GEQ
+    { Ast.Geq }
+  | EQUAL
+    { Ast.Equal }
+  | NEQ
+    { Ast.Neq }
+  ;
+
+%inline uop:
+  | NOT
+    { Ast.Not }
+  | SUB
+    { Ast.Neg }

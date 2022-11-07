@@ -41,6 +41,15 @@ let newline = ['\r' '\n'] | "\r\n"
 (* Scanner specification *)
 
 rule next_token = parse
+| boolean as sbool
+  {
+    let vbool =
+      match sbool with
+      | "true" -> true
+      | "false" -> false
+      | _ -> failwith "the impossible happened"
+    in BOOL vbool
+  }
 | id as word
   {
     try
@@ -57,15 +66,34 @@ rule next_token = parse
     let vnum = int_of_string snum in
     INT vnum
   }
-| boolean as sbool
-  {
-    let vbool =
-      match sbool with
-      | "true" -> true
-      | "false" -> false
-      | _ -> failwith "the impossible happened"
-    in BOOL vbool
-  }
+| '='
+  { ASSIGN }
+| "&&"
+  { AND }
+| "||"
+  { OR }
+| "=="
+  { EQUAL }
+| "!="
+  { NEQ }
+| '<'
+  { LESS}
+| '>'
+  { GREATER }
+| "<="
+  { LEQ }
+| ">="
+  { GEQ }
+| '+'
+  { ADD }
+| '-'
+  { SUB }
+| '%'
+  { MOD }
+| '/'
+  { DIV }
+| '!'
+  { NOT }
 | ','
   { COMMA }
 | ';'

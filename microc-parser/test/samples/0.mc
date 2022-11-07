@@ -27,4 +27,8 @@ void funzione(int* a, int b[10], void ceh) {
   return *d[a];
   return *d[b]; // fare qualcosa
   return *d[c]; // fare qualcosa
+
+  a;
+
+  a = 2;
 } 
