@@ -22,8 +22,16 @@
       ("bool", BOOL_T);
       ("char", CHAR_T);
       ("void", VOID_T);
-      (* ("null", NULL); *)
-    ] in create_hashtable (List.length table) table 
+      ("NULL", NULL);
+    ] in create_hashtable (List.length table) table
+
+  let char_for_backslash = function
+    'n' -> '\010'
+  | 't' -> '\009'
+  | 'b' -> '\008'
+  | 'r' -> '\013'
+  | 'f' -> '\012'
+  | c   -> c
 }
 
 let digit_base10 = ['0'-'9']
@@ -39,6 +47,9 @@ let boolean = "true" | "false"
 
 let newline = ['\r' '\n'] | "\r\n"
 let whitespace = [' ' '\t']
+
+let backslash_escapes =
+  ['\\' '\'' '"' 'n' 't' 'b' 'r' 'f']
 
 (* Scanner specification *)
 
@@ -68,6 +79,11 @@ rule next_token = parse
     let vnum = int_of_string snum in
     INT vnum
   }
+
+| "'" [^ '\\'] "'"
+    { CHAR (Lexing.lexeme_char lexbuf 1) }
+| "'" '\\' backslash_escapes "'"
+    { CHAR (char_for_backslash (Lexing.lexeme_char lexbuf 2)) }
 | '='
   { ASSIGN }
 | "&&"
