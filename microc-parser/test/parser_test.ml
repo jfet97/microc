@@ -21,7 +21,8 @@ let process_source filename =
   try
     lexbuf |>
     Parsing.parse Scanner.next_token |>
-    Ast.show_program |> 
+    (* Ast.show_program |>  *)
+    Ast.sprint_ast |> 
     Printf.printf "Parsing succeded!\n\n%s\n"   
   with 
   | Scanner.Lexing_error (pos, msg)

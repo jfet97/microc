@@ -98,27 +98,130 @@ let rec int_to_spaces i =
   else if i = 1 then " "
   else int_to_spaces(i-1) |+| " "
 
-let print_string_indented i s =
-  Printf.printf "%s" ((int_to_spaces i) |+| s)
+let sprint_string_indented i s =
+  Printf.sprintf "%s" ((int_to_spaces i) |+| s)
 
-let rec print_program i prog = 
-  print_string_indented i "program\n";
-  match prog with
-  | Prog(tls) -> List.iter (print_topdecl (i + 2)) tls
+let rec sprint_program i prog = 
+  let prog_str = match prog with
+    | Prog(tls) -> List.fold_left (fun a c -> (sprint_topdecl (i + 2) c) |+| a) "" tls
+  in sprint_string_indented i "program\n" |+| prog_str;
 
-and print_topdecl i tl =
-  print_string_indented i "topdecl\n";
-  match tl.node with
-  | Fundecl(fd) -> print_fundecl (i+2) fd
-  | Vardec(typ, id) -> print_vardec (i+2) typ id
+and sprint_topdecl i tl =
+  let tl_str = match tl.node with
+    | Fundecl(fd) -> sprint_fundecl (i+2) fd
+    | Vardec(typ, id) -> sprint_vardec (i+2) typ id
+  in sprint_string_indented i "topdecl\n" |+| tl_str;
 
-and print_fundecl i fd =
-  print_string_indented i "fundecl\n"
+and sprint_fundecl i fn =
+  sprint_string_indented i "fundecl\n"
+  |+| sprint_typ (i+2) fn.typ |+| "\n"
+  |+| sprint_string_indented (i+2) "fname " |+| fn.fname |+| "\n"
+  |+| sprint_string_indented (i+2) "formals\n" 
+  |+| List.fold_left (fun a c -> a |+| (sprint_vardec (i+4) (fst c) (snd c))) "" fn.formals
+  |+| sprint_string_indented (i+2) "body\n" |+| sprint_stmt (i+4) fn.body
 
-and print_vardec i typ id =
-  print_string_indented i "vardec";
+and sprint_vardec i typ id =
+  sprint_string_indented i ("vardec\n" |+| (sprint_typ (i+2) typ) |+| " " |+| id |+| "\n" );
 
+and sprint_typ i typ =
+  let rec aux = function
+    | TypI -> "int"
+    | TypC -> "char"
+    | TypV -> "void"
+    | TypB -> "bool"
+    | TypP(typp) ->  "*(" |+| (aux typp) |+| ")"
+    | TypA(typa, io) -> 
+      let typas = "(" |+| (aux typa) |+| ")" in
+      match io with
+        | None ->  typas |+| "[]"
+        | Some(i) -> typas |+| "[" |+| (string_of_int i) |+| "]"
+  in sprint_string_indented i ("typ " |+| (aux typ))
+
+
+and sprint_stmt i stmt = 
+    let stmt_str = match stmt.node with
+      | If(ex, st1, st2) -> sprint_string_indented (i+2) "if\n"
+                            |+| sprint_expr (i+4) ex
+                            |+| sprint_stmt (i+4) st1
+                            |+| sprint_stmt (i+4) st2
+      | While(ex, st) -> sprint_string_indented (i+2) "while\n"
+                            |+| sprint_expr (i+4) ex
+                            |+| sprint_stmt (i+4) st
+      | Return(exo) -> sprint_string_indented (i+2) "return\n"
+                            |+| (match exo with 
+                                  | None -> ""
+                                  | Some(ex) -> sprint_expr (i+4) ex)
+      | Expr(ex) -> sprint_expr (i+2) ex
+      | Block(sts) -> sprint_string_indented (i+2) "block\n"
+                      |+| List.fold_left (fun a c -> a |+| sprint_stmtordec (i+4) c) "" sts
+  in sprint_string_indented i "stmt\n" |+| stmt_str
+
+
+
+and sprint_stmtordec i stmtordec =
+  let stmtordec_str = match stmtordec.node with
+    | Dec(typ, id) -> sprint_vardec (i+2) typ id
+    | Stmt(st) -> sprint_stmt (i+2) st
+  in sprint_string_indented (i) "stmtordec\n" |+| stmtordec_str
+
+and sprint_expr i expr = 
+  let expr_str = match expr.node with
+    | Access(ac) -> sprint_access (i+2) ac
+    | Assign(ac, ex) -> sprint_string_indented (i+2) "assign\n"
+                        |+| sprint_access (i+4) ac
+                        |+| sprint_expr (i+4) ex
+    | Addr(ac) -> sprint_string_indented (i+2) "addr\n"
+                  |+| sprint_access (i+4) ac
+    | ILiteral(i') -> sprint_string_indented (i+2) ("iliteral " |+| string_of_int i' |+| "\n")
+    | CLiteral(c) -> sprint_string_indented (i+2) ("cliteral " |+| String.make 1 c |+| "\n")
+    | BLiteral(b) -> sprint_string_indented (i+2) ("bliteral " |+| string_of_bool b |+| "\n")
+    | UnaryOp(uop, ex) -> sprint_string_indented (i+2) "unaryop\n"
+                          |+| sprint_uop (i+4) uop
+                          |+| sprint_expr (i+4) ex
+    | BinaryOp(binop, ex1, ex2) -> sprint_string_indented (i+2) "binaryop\n"
+                          |+| sprint_binop (i+4) binop
+                          |+| sprint_expr (i+4) ex1
+                          |+| sprint_expr (i+4) ex2
+    | Call(id, exs) ->  sprint_string_indented (i+2) "call\n"
+                        |+| sprint_string_indented (i+4) "id " |+| id |+| "\n"
+                        |+| sprint_string_indented (i+4) "parameters\n" 
+                        |+| List.fold_left (fun a c -> a |+| sprint_expr (i+6) c) "" exs
+  in sprint_string_indented i "expr\n" |+| expr_str
+
+and sprint_uop i uop =
+  let uop_str = match uop with
+    | Neg -> sprint_string_indented (i+2) "neg\n"
+    | Not -> sprint_string_indented (i+2) "not\n"
+  in sprint_string_indented i "uop\n" |+| uop_str
+
+and sprint_binop i binop =
+  let binop_str = match binop with
+    | Add -> sprint_string_indented (i+2) "add\n"
+    | Sub -> sprint_string_indented (i+2) "sub\n"
+    | Mult -> sprint_string_indented (i+2) "mult\n"
+    | Div -> sprint_string_indented (i+2) "div\n"
+    | Mod -> sprint_string_indented (i+2) "mod\n"
+    | Equal -> sprint_string_indented (i+2) "equal\n"
+    | Neq -> sprint_string_indented (i+2) "neq\n"
+    | Less -> sprint_string_indented (i+2) "less\n"
+    | Leq -> sprint_string_indented (i+2) "leq\n"
+    | Greater -> sprint_string_indented (i+2) "greater\n"
+    | Geq -> sprint_string_indented (i+2) "geq\n"
+    | And -> sprint_string_indented (i+2) "and\n"
+    | Or -> sprint_string_indented (i+2) "or\n"
+  in sprint_string_indented i "binop\n" |+| binop_str
+
+and sprint_access i ac = 
+    let ac_str = match ac.node with
+    | AccVar(id) -> sprint_string_indented (i+2) "accvar " |+| id |+| "\n"
+    | AccDeref(ex) -> sprint_string_indented (i+2) "accderef\n" 
+                      |+| sprint_expr (i+4) ex
+    | AccIndex(ac', ex) -> sprint_string_indented (i+2) "accindex\n"
+                           |+| sprint_access (i+4) ac'
+                           |+| sprint_expr (i+4) ex
+  in sprint_string_indented i "access\n" |+| ac_str
+  
 ;;
 
 
-let print ast = print_program 0 ast;
+let sprint_ast ast = sprint_program 0 ast;
