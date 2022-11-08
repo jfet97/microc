@@ -256,7 +256,12 @@ rexpr:
       let loc = Location.to_code_position $loc in
       Ast.UnaryOp($1, $2) |@| loc
     }
-    (* TODO: ID "(" ((Expr ",")* Expr)? ")" *)
+  | ID LEFT_PAREN separated_list(COMMA, expr) RIGHT_PAREN
+    {
+      let loc = Location.to_code_position $loc in
+      Ast.Call($1, $3) |@| loc
+    }
+  ;
 
 %inline binop:
   | ADD

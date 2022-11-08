@@ -30,13 +30,15 @@ let digit_base10 = ['0'-'9']
 let digit_base16 = ['0'-'9' 'A'-'F']
 let one_to_nine = ['1'-'9']
 let one_to_f = ['1'-'9' 'A'-'F']
+let alpha = ['a'-'z' 'A'-'Z']
 
 let num_base10 = ('-'? one_to_nine digit_base10*) | '0'
 let num_base16 = ('-'? "0x" one_to_f digit_base16) | "0x0"
-let id = ['_' 'a'-'z' 'A'-'Z']['_' 'a'-'z' 'A'-'Z' '0'-'9']*
+let id = ('_' | alpha)('_' | alpha | digit_base10)*
 let boolean = "true" | "false"
 
 let newline = ['\r' '\n'] | "\r\n"
+let whitespace = [' ' '\t']
 
 (* Scanner specification *)
 
@@ -114,9 +116,19 @@ rule next_token = parse
   { LEFT_CURLY }
 | '}'
   { RIGHT_CURLY }
-| "//" [^ '\n']*  (* eat up one-line comments, TODO: enhance to support all ways to andare a capo *)
-| [' ' '\t']  (* eat up whitespaces *)
+| "//" 
   {
+    (* eat up one-line comments *)
+    single_line_comment lexbuf
+  } 
+| "/*" 
+  {
+    (* eat up multiline comments *)
+    multi_line_comment lexbuf
+  } 
+| whitespace
+  {
+    (* eat up whitespaces *)
     next_token lexbuf
   }
 | newline
@@ -133,3 +145,36 @@ rule next_token = parse
   }
 | eof
   { EOF }
+
+and single_line_comment = parse
+  | newline 
+    { 
+      Lexing.new_line lexbuf;
+      next_token lexbuf 
+    }
+  | eof { EOF }
+  | _ 
+    { 
+      single_line_comment lexbuf 
+    }
+
+and multi_line_comment = parse
+  | "*/" 
+    { 
+      next_token lexbuf 
+    }
+  | newline 
+    { 
+      Lexing.new_line lexbuf;
+      multi_line_comment lexbuf 
+    }
+  | eof 
+    { 
+      let err_msg = "Lexer: Unexpected EOF in a multiline comment. Please terminate it" in
+      let pos = Location.to_lexeme_position lexbuf in
+      raise (Lexing_error(pos, err_msg)) 
+    }
+  | _ 
+    { 
+      multi_line_comment lexbuf 
+    }
