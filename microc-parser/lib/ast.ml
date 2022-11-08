@@ -85,3 +85,40 @@ and topdecl_node = Fundecl of fun_decl | Vardec of typ * identifier
 [@@deriving show]
 
 type program = Prog of topdecl list [@@deriving show]
+
+
+
+(* pretty print *)
+
+
+let (|+|) s1 s2 = String.concat "" [s1; s2];;
+
+let rec int_to_spaces i =
+  if i <= 0 then ""
+  else if i = 1 then " "
+  else int_to_spaces(i-1) |+| " "
+
+let print_string_indented i s =
+  Printf.printf "%s" ((int_to_spaces i) |+| s)
+
+let rec print_program i prog = 
+  print_string_indented i "program\n";
+  match prog with
+  | Prog(tls) -> List.iter (print_topdecl (i + 2)) tls
+
+and print_topdecl i tl =
+  print_string_indented i "topdecl\n";
+  match tl.node with
+  | Fundecl(fd) -> print_fundecl (i+2) fd
+  | Vardec(typ, id) -> print_vardec (i+2) typ id
+
+and print_fundecl i fd =
+  print_string_indented i "fundecl\n"
+
+and print_vardec i typ id =
+  print_string_indented i "vardec";
+
+;;
+
+
+let print ast = print_program 0 ast;

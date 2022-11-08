@@ -29,7 +29,8 @@
 %token LEFT_BRACKET RIGHT_BRACKET
 %token LEFT_CURLY RIGHT_CURLY
 %token RETURN
-%token WHILE
+%token IF ELSE
+%token WHILE FOR
 
 %token EOF
 /* Precedence and associativity specification */
@@ -165,6 +166,43 @@ stmt:
     { 
       let loc = Location.to_code_position $loc in
       Ast.While($3, $5) |@| loc
+    }
+  | FOR LEFT_PAREN option(expr) SEMICOLON option(expr) SEMICOLON option(expr) RIGHT_PAREN stmt
+    {
+      let loc = Location.to_code_position $loc in
+      let init_expr_stm_o =
+        let loc_e = Location.to_code_position($startpos($3), $endpos($4)) in
+        Option.map (fun ex ->  Ast.Stmt(Ast.Expr(ex) |@| loc_e) |@| loc_e) $3
+      in
+      let update_expr_stm_o =
+        let loc_e = Location.to_code_position($startpos($7), $endpos($7)) in
+        Option.map (fun ex ->  Ast.Stmt(Ast.Expr(ex) |@| loc_e) |@| loc_e) $3
+      in
+      let while_stm =
+        match update_expr_stm_o with
+          | None -> $9
+          | Some(uestm) -> Ast.Block([
+              Ast.Stmt($9) |@| Location.to_code_position($startpos($9), $endpos($9));
+              uestm
+            ]) |@| Location.to_code_position($startpos($7), $endpos($9))
+      in
+      let while_expr = match $5 with
+          | None -> Ast.BLiteral(true) |@| Location.to_code_position($startpos($5), $endpos($5))
+          | Some(ex) -> ex
+      in
+      let while_partial = Ast.While(while_expr, while_stm)
+      in
+      let while_partial_loc = Location.to_code_position($startpos($5), $endpos($9))
+      in 
+      let for_as_while =
+        match init_expr_stm_o with
+          | None -> while_partial |@| loc
+          | Some(iestm) -> Ast.Block([
+            iestm;
+            Ast.Stmt(while_partial |@| while_partial_loc) |@| while_partial_loc
+          ]) |@| loc
+      in
+      for_as_while
     }
   ;
 

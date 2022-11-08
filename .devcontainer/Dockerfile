@@ -8,7 +8,6 @@ RUN add-apt-repository ppa:avsm/ppa
 RUN apt install -y ocaml opam python3 cmake llvm llvm-14-dev
 RUN opam init --auto-setup --yes
 RUN opam install ocaml-lsp-server -y
-RUN opam install ocamlformat -y
 RUN opam install menhir -y
 RUN opam install ppx_deriving -y
 RUN opam install dune -y

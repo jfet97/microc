@@ -12,10 +12,9 @@
   (* map keyword lexemes to corresponding Parser tokens*)
   let keyword_table =
     let table = [
-      (* ("if", IF);
+      ("if", IF);
       ("else", ELSE);
-      ("function", FUNCTION);
-      ("for", FOR); *)
+      ("for", FOR);
       ("while", WHILE);
       ("return", RETURN);
       ("int", INT_T);
@@ -26,7 +25,7 @@
     ] in create_hashtable (List.length table) table
 
   let char_for_backslash = function
-    'n' -> '\010'
+  | 'n' -> '\010'
   | 't' -> '\009'
   | 'b' -> '\008'
   | 'r' -> '\013'
