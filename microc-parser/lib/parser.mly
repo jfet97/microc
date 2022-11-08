@@ -128,11 +128,8 @@ fundecl:
 (* TODO *)
 block:
   | LEFT_CURLY list(block_entry) RIGHT_CURLY
-    { 
-      let stmtordec_list = List.fold_right (fun o a -> match o with
-                                                      | None -> a
-                                                      | Some(sod) -> sod :: a) $2 [] in
-      Ast.Block(stmtordec_list) |@| (Location.to_code_position $loc)
+    {
+      Ast.Block($2) |@| (Location.to_code_position $loc)
     }
   ;
 
@@ -140,26 +137,35 @@ block_entry:
   | vardecl_sem
     { 
       let (t, id, loc) = $1 in
-      Some(Ast.Dec(t, id) |@| loc)
+      Ast.Dec(t, id) |@| loc
     }
   | stmt
     {
-      Option.map (fun sm -> (Ast.Stmt(sm) |@| sm.Ast.loc)) $1
+      let sm = $1 in
+      Ast.Stmt(sm) |@| sm.Ast.loc
     }
 
 (* TODO: finire *)
 stmt:
   | RETURN option(expr) SEMICOLON
-    { Some (Ast.Return($2) |@| Location.to_code_position $loc) }
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Return($2) |@| loc
+    }
   | option(expr) SEMICOLON 
     { 
       let loc = Location.to_code_position $loc in
-      Option.map (fun ex -> (Ast.Expr(ex) |@| loc)) $1
+      match $1 with
+        | None -> Ast.Block([]) |@| loc
+        | Some(ex) -> Ast.Expr(ex) |@| loc
     }
   | block
-    { Some $1 }
-  (*| WHILE LEFT_PAREN (* optional(Expr) *) RIGHT_PAREN stmt
-    { SOME (AST.While($3, $5) )} *)
+    { $1 }
+  | WHILE LEFT_PAREN expr RIGHT_PAREN stmt
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.While($3, $5) |@| loc
+    }
   ;
 
 expr:
