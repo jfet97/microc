@@ -35,6 +35,9 @@
 %token EOF
 /* Precedence and associativity specification */
 
+%nonassoc THEN
+%nonassoc ELSE
+
 %right ASSIGN
 %left OR
 %left AND
@@ -169,6 +172,7 @@ stmt:
     }
   | FOR LEFT_PAREN option(expr) SEMICOLON option(expr) SEMICOLON option(expr) RIGHT_PAREN stmt
     {
+      (* for -> while rewriting *)
       let loc = Location.to_code_position $loc in
       let init_expr_stm_o =
         let loc_e = Location.to_code_position($startpos($3), $endpos($4)) in
@@ -176,7 +180,7 @@ stmt:
       in
       let update_expr_stm_o =
         let loc_e = Location.to_code_position($startpos($7), $endpos($7)) in
-        Option.map (fun ex ->  Ast.Stmt(Ast.Expr(ex) |@| loc_e) |@| loc_e) $3
+        Option.map (fun ex ->  Ast.Stmt(Ast.Expr(ex) |@| loc_e) |@| loc_e) $7
       in
       let while_stm =
         match update_expr_stm_o with
@@ -203,6 +207,17 @@ stmt:
           ]) |@| loc
       in
       for_as_while
+    }
+    (* https://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else *)
+    | IF LEFT_PAREN expr RIGHT_PAREN stmt %prec THEN
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.If($3, $5, Ast.Block([]) |@| Location.to_code_position($endpos($5), $endpos($5))) |@| loc
+    }
+    | IF LEFT_PAREN expr RIGHT_PAREN stmt ELSE stmt
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.If($3, $5, $7) |@| loc
     }
   ;
 

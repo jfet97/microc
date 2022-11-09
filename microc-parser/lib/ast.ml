@@ -146,8 +146,10 @@ and sprint_stmt i stmt =
     | If (ex, st1, st2) ->
         sprint_string_indented (i + 2) "if\n"
         |+| sprint_expr (i + 4) ex
-        |+| sprint_stmt (i + 4) st1
-        |+| sprint_stmt (i + 4) st2
+        |+| sprint_string_indented (i + 4) "then\n"
+        |+| sprint_stmt (i + 6) st1
+        |+| sprint_string_indented (i + 4) "else\n"
+        |+| sprint_stmt (i + 6) st2
     | While (ex, st) ->
         sprint_string_indented (i + 2) "while\n"
         |+| sprint_expr (i + 4) ex

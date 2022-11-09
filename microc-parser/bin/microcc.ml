@@ -1,2 +1,1 @@
-let () = 
-  print_string "Hello World!\n"
+let () = print_string "Hello World!\n"
