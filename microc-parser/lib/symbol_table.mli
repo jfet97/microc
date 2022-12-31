@@ -1,4 +1,6 @@
 exception DuplicateEntry of Ast.identifier
+exception NotFoundEntry of Ast.identifier
+
 type 'a table 
 val empty_table : 'a table 
 val begin_block : 'a table -> 'a table 
