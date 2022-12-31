@@ -9,16 +9,13 @@ let string_of_position lexbuf =
 
 let parse _scanner _lexbuf =
   try Parser.program _scanner _lexbuf with
-  | Scanner.Lexing_error (pos, msg) ->
-      Printf.fprintf stderr "\n%s: Scanner.Lexing_error %s\n"
-        (Location.show_lexeme_pos pos)
-        msg;
-      exit (-1)
-  | Syntax_error (pos, msg) ->
-      Printf.fprintf stderr "\n%s: Syntax_error (%s)\n"
-        (Location.show_lexeme_pos pos)
-        msg;
-      exit (-1)
-  | Parser.Error ->
-      Printf.fprintf stderr "\n%s: Parser.Error\n" (string_of_position _lexbuf);
-      exit (-1)
+  | Scanner.Lexing_error (pos, msg) as sle ->
+      (* Printf.fprintf stderr "\n%s: Scanner.Lexing_error %s\n"
+         (Location.show_lexeme_pos pos)
+         msg; *)
+      raise sle
+  | Syntax_error (pos, msg) as spe ->
+      (* Printf.fprintf stderr "\n%s: Syntax_error (%s)\n"
+         (Location.show_lexeme_pos pos)
+         msg; *)
+      raise spe

@@ -22,7 +22,7 @@ void funzione(int* a, int b[10], void ceh) {
 
   return *34[a];
 
-  return *34[*NULL];
+  return *34[*NULL]
 
   return *d[a];
   return *d[b]; // fare qualcosa

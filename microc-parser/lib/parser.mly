@@ -149,7 +149,6 @@ block_entry:
       Ast.Stmt(sm) |@| sm.Ast.loc
     }
 
-(* TODO: finire *)
 stmt:
   | RETURN option(expr) SEMICOLON
     { 
