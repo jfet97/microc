@@ -56,7 +56,11 @@ let rec typecheck_expression gamma expr =
         raise_semantic_error expr.loc
           ("Cannot assign " ^ show_ttype rhs_t ^ " to " ^ show_ttype lhs_t)
   | Addr a -> TPtr (typecheck_access gamma a)
-  | ILiteral _ -> TInt
+  | ILiteral i ->
+      if i >= 2147483648 then raise_semantic_error expr.loc "Integer overflow"
+      else if i <= -2147483649 then
+        raise_semantic_error expr.loc "Integer underflow"
+      else TInt
   | BLiteral _ -> TBool
   | CLiteral _ -> TChar
   | UnaryOp (op, ex) -> (
@@ -161,42 +165,41 @@ let rec typecheck_expression gamma expr =
           raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must have the same type"))
-  | Call (id, args) -> (
-      try
-        let fun_t = Symbol_table.lookup id gamma in
-        if is_type_fun fun_t then
-          let rec check_args ft args =
-            match (ft, args) with
-            (* function with no arguments, no arguments *)
-            | TFun (param_t, ret_t), [] ->
-                if check_type_equality param_t TVoid then ret_t
-                else
-                  raise_semantic_error expr.loc
-                    ("Too few arguments for function " ^ id)
-            (* function with one argument, an argument *)
-            | TFun (param_t, ret_t), arg :: [] ->
-                if check_type_equality param_t (typecheck_expression gamma arg)
-                then
-                  (* a function is returned but we've ended the arguments *)
-                  if is_type_fun ret_t then
-                    raise_semantic_error expr.loc ("Too few arguments for " ^ id)
-                  else ret_t
-                else
-                  raise_semantic_error expr.loc
-                    ("Wrong argument type when calling" ^ id)
-            (* function with one argument, more arguments left *)
-            | TFun (param_t, ret_t), arg :: xs ->
-                if check_type_equality param_t (typecheck_expression gamma arg)
-                then check_args ret_t xs
-                else
-                  raise_semantic_error expr.loc
-                    ("Wrong argument type when calling" ^ id)
-            (* some arguments left but ft is no more a function, so it was a previous end-result *)
-            | _ -> raise_semantic_error expr.loc ("Too many arguments for" ^ id)
-          in
-          check_args fun_t args
-        else raise_semantic_error expr.loc (id ^ " is not a function")
-      with _ -> raise_semantic_error expr.loc "Variable not in scope")
+  | Call (id, args) ->
+      (* let _ = Symbol_table.print_keys gamma in *)
+      let fun_t = Symbol_table.lookup id gamma in
+      if is_type_fun fun_t then
+        let rec check_args ft args =
+          match (ft, args) with
+          (* function with no arguments, no arguments *)
+          | TFun (param_t, ret_t), [] ->
+              if check_type_equality param_t TVoid then ret_t
+              else
+                raise_semantic_error expr.loc
+                  ("Too few arguments for function " ^ id)
+          (* function with one argument, an argument *)
+          | TFun (param_t, ret_t), arg :: [] ->
+              if check_type_equality param_t (typecheck_expression gamma arg)
+              then
+                (* a function is returned but we've ended the arguments *)
+                if is_type_fun ret_t then
+                  raise_semantic_error expr.loc ("Too few arguments for " ^ id)
+                else ret_t
+              else
+                raise_semantic_error expr.loc
+                  ("Wrong argument type when calling " ^ id)
+          (* function with one argument, more arguments left *)
+          | TFun (param_t, ret_t), arg :: xs ->
+              if check_type_equality param_t (typecheck_expression gamma arg)
+              then check_args ret_t xs
+              else
+                raise_semantic_error expr.loc
+                  ("Wrong argument type when calling " ^ id)
+          (* some arguments left but ft is no more a function, so it was a previous end-result *)
+          | _ -> raise_semantic_error expr.loc ("Too many arguments for" ^ id)
+        in
+        check_args fun_t args
+      else raise_semantic_error expr.loc (id ^ " is not a function")
 
 and typecheck_access gamma access =
   match remove_node_annotations access with
@@ -339,12 +342,13 @@ let typecheck_topdeclaration gamma topdlecl =
                     ())
               formals_t
           in
-
           (* add the function into the global scope *)
           let fun_t =
             List.fold_right
               (fun (param_t, _) acc -> TFun (param_t, acc))
-              formals_t return_t
+              (if List.length formals_t == 0 then [ (TVoid, "") ]
+              else formals_t)
+              return_t
           in
           let _ = Symbol_table.add_entry fname fun_t gamma in
           (* pass in the expected return type: all inners return statements should be complient *)
@@ -382,10 +386,12 @@ let type_check p =
       let global = Symbol_table.begin_block Symbol_table.empty_table in
       let _ = Symbol_table.add_entry "getint" (TFun (TVoid, TInt)) global in
       let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
+      (* let _ = Symbol_table.print_keys global in *)
       let delayed_bodies_check =
         List.map
           (fun topdecl -> typecheck_topdeclaration global topdecl)
           program
       in
+      (* let _ = Symbol_table.print_keys global in *)
       let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_check in
       p

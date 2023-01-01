@@ -40,3 +40,18 @@ let of_alist l =
         (Hashtbl.create (List.length l))
         l;
     ]
+
+let print_keys st =
+  let _ = Printf.printf "\nSTART PRINTING ST:" in
+  let aux ht = Hashtbl.iter (fun id _ -> Printf.printf "%s " id) ht in
+  match st with
+  | SymbolTable l ->
+      let _ =
+        List.iter
+          (fun ht ->
+            aux ht;
+            Printf.printf "\n")
+          l
+      in
+      let _ = Printf.printf "END PRINTING ST\n" in
+      ()

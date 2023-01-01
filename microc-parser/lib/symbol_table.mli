@@ -8,3 +8,4 @@ val end_block : 'a table -> 'a table
 val add_entry : Ast.identifier -> 'a -> 'a table -> 'a table 
 val lookup : Ast.identifier -> 'a table -> 'a
 val of_alist : (Ast.identifier * 'a) list -> 'a table 
+val print_keys: 'a table -> unit
