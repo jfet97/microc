@@ -1,5 +1,8 @@
 exception Semantic_error of Location.code_pos * string
 
+let raise_semantic_error code_position msg =
+  raise (Semantic_error (code_position, msg))
+
 open Ast
 
 (* these are the actual types of our entities, functions included, the one from ast were just annotations *)
@@ -38,8 +41,6 @@ let is_type_fun t = match t with TFun (_, _) -> true | _ -> false
 let remove_node_annotations annotated_node =
   match annotated_node with { loc; node } -> node
 
-let prelude = [ ("getint", TFun (TVoid, TInt)); ("print", TFun (TInt, TVoid)) ]
-
 let rec typecheck_expression gamma expr =
   match remove_node_annotations expr with
   | Access v -> typecheck_access gamma v
@@ -47,12 +48,12 @@ let rec typecheck_expression gamma expr =
       let lhs_t = typecheck_access gamma lhs in
       let rhs_t = typecheck_expression gamma rhs in
       if is_type_array lhs_t then
-        raise (Utils.raise_semantic_error expr.loc "Cannot reassign an array")
+        raise (raise_semantic_error expr.loc "Cannot reassign an array")
       else if is_type_fun lhs_t then
-        raise (Utils.raise_semantic_error expr.loc "Cannot reassign a function")
+        raise (raise_semantic_error expr.loc "Cannot reassign a function")
       else if check_type_equality lhs_t rhs_t then rhs_t
       else
-        Utils.raise_semantic_error expr.loc
+        raise_semantic_error expr.loc
           ("Cannot assign " ^ show_ttype rhs_t ^ " to " ^ show_ttype lhs_t)
   | Addr a -> TPtr (typecheck_access gamma a)
   | ILiteral _ -> TInt
@@ -62,11 +63,11 @@ let rec typecheck_expression gamma expr =
       match (op, typecheck_expression gamma ex) with
       | Neg, TInt -> TInt
       | Neg, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             "The unary - operator must be applied to a number"
       | Ast.Not, TBool -> TBool
       | Ast.Not, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             "The unary ! operator must be applied to a boolean")
   | BinaryOp (op, ex1, ex2) -> (
       match
@@ -89,75 +90,75 @@ let rec typecheck_expression gamma expr =
       | Equal, TBool, TBool -> TBool
       | Equal, TChar, TChar -> TBool
       | Equal, TArray (_, _), TArray (_, _) ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator cannot be applied to arrays")
       | Equal, TFun (_, _), TFun (_, _) ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator cannot be applied to functions")
       | Equal, TPtr tp1, TPtr tp2 when check_type_equality tp1 tp2 -> TBool
       | Neq, TBool, TBool -> TBool
       | Neq, TChar, TChar -> TBool
       | Neq, TArray (_, _), TArray (_, _) ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator cannot be applied to arrays")
       | Neq, TFun (_, _), TFun (_, _) ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator cannot be applied to functions")
       | Neq, TPtr tp1, TPtr tp2 when check_type_equality tp1 tp2 -> TBool
       | Add, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Sub, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Mult, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Div, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Mod, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Less, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Leq, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Greater, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | Geq, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be numbers")
       | And, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be booleans")
       | Or, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must be booleans")
       | Equal, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must have the same type")
       | Neq, _, _ ->
-          Utils.raise_semantic_error expr.loc
+          raise_semantic_error expr.loc
             ("The binary " ^ Ast.show_binop op
            ^ " operator's arguments must have the same type"))
   | Call (id, args) -> (
@@ -170,7 +171,7 @@ let rec typecheck_expression gamma expr =
             | TFun (param_t, ret_t), [] ->
                 if check_type_equality param_t TVoid then ret_t
                 else
-                  Utils.raise_semantic_error expr.loc
+                  raise_semantic_error expr.loc
                     ("Too few arguments for function " ^ id)
             (* function with one argument, an argument *)
             | TFun (param_t, ret_t), arg :: [] ->
@@ -178,40 +179,40 @@ let rec typecheck_expression gamma expr =
                 then
                   (* a function is returned but we've ended the arguments *)
                   if is_type_fun ret_t then
-                    Utils.raise_semantic_error expr.loc
+                    raise_semantic_error expr.loc
                       ("Too few arguments for " ^ id)
                   else ret_t
                 else
-                  Utils.raise_semantic_error expr.loc
+                  raise_semantic_error expr.loc
                     ("Wrong argument type when calling" ^ id)
             (* function with one argument, more arguments left *)
             | TFun (param_t, ret_t), arg :: xs ->
                 if check_type_equality param_t (typecheck_expression gamma arg)
                 then check_args ret_t xs
                 else
-                  Utils.raise_semantic_error expr.loc
+                  raise_semantic_error expr.loc
                     ("Wrong argument type when calling" ^ id)
             (* some arguments left but ft is no more a function, so it was a previous end-result *)
             | _ ->
-                Utils.raise_semantic_error expr.loc
+                raise_semantic_error expr.loc
                   ("Too many arguments for" ^ id)
           in
           check_args fun_t args
-        else Utils.raise_semantic_error expr.loc (id ^ " is not a function")
-      with _ -> Utils.raise_semantic_error expr.loc "Variable not in scope")
+        else raise_semantic_error expr.loc (id ^ " is not a function")
+      with _ -> raise_semantic_error expr.loc "Variable not in scope")
 
 and typecheck_access gamma access =
   match remove_node_annotations access with
   (* get type of variable in case of variable access *)
   | AccVar id -> (
       try match Symbol_table.lookup id gamma with t -> t
-      with _ -> Utils.raise_semantic_error access.loc "Variable not in scope")
+      with _ -> raise_semantic_error access.loc "Variable not in scope")
   (* ensure we're dereferencing a pointer *)
   | AccDeref ex -> (
       let t = typecheck_expression gamma ex in
       match t with
       | TPtr typ -> typ
-      | _ -> Utils.raise_semantic_error access.loc "Dereferencing a non-pointer"
+      | _ -> raise_semantic_error access.loc "Dereferencing a non-pointer"
       )
   (* ensure we're indexing into an array and that the index is an integer *)
   | AccIndex (b, idx) -> (
@@ -220,8 +221,8 @@ and typecheck_access gamma access =
       | TArray (array_typ, _) ->
           if check_type_equality (typecheck_expression gamma idx) TInt then
             array_typ
-          else Utils.raise_semantic_error access.loc "Index is not an int"
-      | _ -> Utils.raise_semantic_error access.loc "Indexing a non-array")
+          else raise_semantic_error access.loc "Index is not an int"
+      | _ -> raise_semantic_error access.loc "Indexing a non-array")
 
 (* return unit instead of tvoid *)
 let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
@@ -237,12 +238,12 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
             is_parent_function
         in
         TVoid
-      else Utils.raise_semantic_error guard.loc "The if guard must be a boolean"
+      else raise_semantic_error guard.loc "The if guard must be a boolean"
   | While (guard, stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         typecheck_statement gamma stmt expected_ret_type is_parent_function
       else
-        Utils.raise_semantic_error guard.loc "The while guard must be a boolean"
+        raise_semantic_error guard.loc "The while guard must be a boolean"
   | Expr expr ->
       let _ = typecheck_expression gamma expr in
       TVoid
@@ -252,14 +253,14 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
           let expr_t = typecheck_expression gamma expr in
           if check_type_equality expr_t expected_ret_type then TVoid
           else
-            Utils.raise_semantic_error expr.loc
+            raise_semantic_error expr.loc
               ("Expected "
               ^ show_ttype expected_ret_type
               ^ " return type but found " ^ show_ttype expr_t)
       | None ->
           if check_type_equality TVoid expected_ret_type then TVoid
           else
-            Utils.raise_semantic_error stmt.loc
+            raise_semantic_error stmt.loc
               ("Expected "
               ^ show_ttype expected_ret_type
               ^ " return type but found void"))
@@ -286,25 +287,25 @@ and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
       let t = from_ast_type typ in
       match t with
       | TVoid ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare a void variable"
       | TArray (_, None) ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare an array without specifiying its size"
       | TArray (_, Some size) when size <= 0 ->
-          Utils.raise_semantic_error stmtordec.loc "Arrays must have size > 0"
+          raise_semantic_error stmtordec.loc "Arrays must have size > 0"
       | TArray (ta, _) when check_type_equality ta TVoid ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare an array of void"
       (* NON ESPRIMIBILE COME DICHIARAZIONE NELL'AST*)
       (* | TArray (ta, _) when is_type_fun ta ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare an array of functions" *)
       | TArray (ta, _) when is_type_array ta ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare a multidimensional array"
       | TPtr tp when is_type_array tp ->
-          Utils.raise_semantic_error stmtordec.loc
+          raise_semantic_error stmtordec.loc
             "Cannot declare a pointer to array"
       | _ ->
           let _ = Symbol_table.add_entry id t gamma in
@@ -318,6 +319,7 @@ let typecheck_topdeclaration gamma topdlecl =
       let return_t = from_ast_type typ in
       match return_t with
       | TVoid | TBool | TChar | TInt ->
+          (* add params inside function scope *)
           let formals_t =
             List.map (fun (typ, id) -> (from_ast_type typ, id)) formals
           in
@@ -326,19 +328,19 @@ let typecheck_topdeclaration gamma topdlecl =
               (fun (t, id) ->
                 match t with
                 | TVoid ->
-                    Utils.raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdlecl.loc
                       "Cannot declare a void parameter"
                 | TArray (_, Some size) when size <= 0 ->
-                    Utils.raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdlecl.loc
                       "Arrays must have size > 0"
                 | TArray (ta, _) when check_type_equality ta TVoid ->
-                    Utils.raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdlecl.loc
                       "Cannot declare an array of void parameter"
                 | TArray (ta, _) when is_type_array ta ->
-                    Utils.raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdlecl.loc
                       "Cannot declare a multidimensional array parameter"
                 | TPtr tp when is_type_array tp ->
-                    Utils.raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdlecl.loc
                       "Cannot declare a pointer to array parameter"
                 | _ ->
                     let _ = Symbol_table.add_entry id t fun_gamma in
@@ -347,32 +349,50 @@ let typecheck_topdeclaration gamma topdlecl =
           in
           (* pass in the expected return type: all inners return statements should be complient *)
           let _ = typecheck_statement fun_gamma body return_t true in
+          (* add the function into the global scope *)
+          let fun_t =
+            List.fold_right
+              (fun (param_t, _) acc -> TFun (param_t, acc))
+              formals_t return_t
+          in
+          let _ = Symbol_table.add_entry fname fun_t gamma in
           TVoid
       | _ ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "A function can only return void, int, bool, char")
   | Vardec (typ, id) -> (
       let t = from_ast_type typ in
       match t with
       | TVoid ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "Cannot declare a void variable"
       | TArray (_, None) ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "Cannot declare an array without specifiying its size"
       | TArray (_, Some size) when size <= 0 ->
-          Utils.raise_semantic_error topdlecl.loc "Arrays must have size > 0"
+          raise_semantic_error topdlecl.loc "Arrays must have size > 0"
       | TArray (ta, _) when check_type_equality ta TVoid ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "Cannot declare an array of void"
       | TArray (ta, _) when is_type_array ta ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "Cannot declare a multidimensional array"
       | TPtr tp when is_type_array tp ->
-          Utils.raise_semantic_error topdlecl.loc
+          raise_semantic_error topdlecl.loc
             "Cannot declare a pointer to array"
       | _ ->
           let _ = Symbol_table.add_entry id t gamma in
           TVoid)
 
-let type_check _p = failwith "Not implemented yet"
+let type_check p =
+  match p with
+  | Prog program ->
+      let global = Symbol_table.begin_block Symbol_table.empty_table in
+      let _ = Symbol_table.add_entry "getint" (TFun (TVoid, TInt)) global in
+      let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
+      let _ =
+        List.iter
+          (fun topdecl -> typecheck_topdeclaration global topdecl |> ignore)
+          program
+      in
+      p
