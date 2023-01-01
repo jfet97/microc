@@ -179,8 +179,7 @@ let rec typecheck_expression gamma expr =
                 then
                   (* a function is returned but we've ended the arguments *)
                   if is_type_fun ret_t then
-                    raise_semantic_error expr.loc
-                      ("Too few arguments for " ^ id)
+                    raise_semantic_error expr.loc ("Too few arguments for " ^ id)
                   else ret_t
                 else
                   raise_semantic_error expr.loc
@@ -193,9 +192,7 @@ let rec typecheck_expression gamma expr =
                   raise_semantic_error expr.loc
                     ("Wrong argument type when calling" ^ id)
             (* some arguments left but ft is no more a function, so it was a previous end-result *)
-            | _ ->
-                raise_semantic_error expr.loc
-                  ("Too many arguments for" ^ id)
+            | _ -> raise_semantic_error expr.loc ("Too many arguments for" ^ id)
           in
           check_args fun_t args
         else raise_semantic_error expr.loc (id ^ " is not a function")
@@ -212,8 +209,7 @@ and typecheck_access gamma access =
       let t = typecheck_expression gamma ex in
       match t with
       | TPtr typ -> typ
-      | _ -> raise_semantic_error access.loc "Dereferencing a non-pointer"
-      )
+      | _ -> raise_semantic_error access.loc "Dereferencing a non-pointer")
   (* ensure we're indexing into an array and that the index is an integer *)
   | AccIndex (b, idx) -> (
       let array_t = typecheck_access gamma b in
@@ -242,8 +238,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
   | While (guard, stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         typecheck_statement gamma stmt expected_ret_type is_parent_function
-      else
-        raise_semantic_error guard.loc "The while guard must be a boolean"
+      else raise_semantic_error guard.loc "The while guard must be a boolean"
   | Expr expr ->
       let _ = typecheck_expression gamma expr in
       TVoid
@@ -287,16 +282,14 @@ and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
       let t = from_ast_type typ in
       match t with
       | TVoid ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare a void variable"
+          raise_semantic_error stmtordec.loc "Cannot declare a void variable"
       | TArray (_, None) ->
           raise_semantic_error stmtordec.loc
             "Cannot declare an array without specifiying its size"
       | TArray (_, Some size) when size <= 0 ->
           raise_semantic_error stmtordec.loc "Arrays must have size > 0"
       | TArray (ta, _) when check_type_equality ta TVoid ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare an array of void"
+          raise_semantic_error stmtordec.loc "Cannot declare an array of void"
       (* NON ESPRIMIBILE COME DICHIARAZIONE NELL'AST*)
       (* | TArray (ta, _) when is_type_fun ta ->
           raise_semantic_error stmtordec.loc
@@ -305,8 +298,7 @@ and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
           raise_semantic_error stmtordec.loc
             "Cannot declare a multidimensional array"
       | TPtr tp when is_type_array tp ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare a pointer to array"
+          raise_semantic_error stmtordec.loc "Cannot declare a pointer to array"
       | _ ->
           let _ = Symbol_table.add_entry id t gamma in
           TVoid)
@@ -347,8 +339,7 @@ let typecheck_topdeclaration gamma topdlecl =
                     ())
               formals_t
           in
-          (* pass in the expected return type: all inners return statements should be complient *)
-          let _ = typecheck_statement fun_gamma body return_t true in
+
           (* add the function into the global scope *)
           let fun_t =
             List.fold_right
@@ -356,7 +347,11 @@ let typecheck_topdeclaration gamma topdlecl =
               formals_t return_t
           in
           let _ = Symbol_table.add_entry fname fun_t gamma in
-          TVoid
+          (* pass in the expected return type: all inners return statements should be complient *)
+          (* delayed computation to add all the functions to the global scope firstly *)
+          fun () ->
+            let _ = typecheck_statement fun_gamma body return_t true in
+            TVoid
       | _ ->
           raise_semantic_error topdlecl.loc
             "A function can only return void, int, bool, char")
@@ -364,25 +359,22 @@ let typecheck_topdeclaration gamma topdlecl =
       let t = from_ast_type typ in
       match t with
       | TVoid ->
-          raise_semantic_error topdlecl.loc
-            "Cannot declare a void variable"
+          raise_semantic_error topdlecl.loc "Cannot declare a void variable"
       | TArray (_, None) ->
           raise_semantic_error topdlecl.loc
             "Cannot declare an array without specifiying its size"
       | TArray (_, Some size) when size <= 0 ->
           raise_semantic_error topdlecl.loc "Arrays must have size > 0"
       | TArray (ta, _) when check_type_equality ta TVoid ->
-          raise_semantic_error topdlecl.loc
-            "Cannot declare an array of void"
+          raise_semantic_error topdlecl.loc "Cannot declare an array of void"
       | TArray (ta, _) when is_type_array ta ->
           raise_semantic_error topdlecl.loc
             "Cannot declare a multidimensional array"
       | TPtr tp when is_type_array tp ->
-          raise_semantic_error topdlecl.loc
-            "Cannot declare a pointer to array"
+          raise_semantic_error topdlecl.loc "Cannot declare a pointer to array"
       | _ ->
           let _ = Symbol_table.add_entry id t gamma in
-          TVoid)
+          fun () -> TVoid)
 
 let type_check p =
   match p with
@@ -390,9 +382,10 @@ let type_check p =
       let global = Symbol_table.begin_block Symbol_table.empty_table in
       let _ = Symbol_table.add_entry "getint" (TFun (TVoid, TInt)) global in
       let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
-      let _ =
-        List.iter
-          (fun topdecl -> typecheck_topdeclaration global topdecl |> ignore)
+      let delayed_bodies_check =
+        List.map
+          (fun topdecl -> typecheck_topdeclaration global topdecl)
           program
       in
+      let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_check in
       p
