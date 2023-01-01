@@ -19,3 +19,5 @@ let parse _scanner _lexbuf =
          (Location.show_lexeme_pos pos)
          msg; *)
       raise spe
+  | Parser.Error ->
+      raise (Syntax_error (Location.to_lexeme_position _lexbuf, "Syntax error"))
