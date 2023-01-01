@@ -40,12 +40,12 @@ let remove_node_annotations annotated_node =
 
 let prelude = [ ("getint", TFun (TVoid, TInt)); ("print", TFun (TInt, TVoid)) ]
 
-let rec get_expression_type gamma expr =
+let rec typecheck_expression gamma expr =
   match remove_node_annotations expr with
-  | Access v -> get_access_type gamma v
+  | Access v -> typecheck_access gamma v
   | Assign (lhs, rhs) ->
-      let lhs_t = get_access_type gamma lhs in
-      let rhs_t = get_expression_type gamma rhs in
+      let lhs_t = typecheck_access gamma lhs in
+      let rhs_t = typecheck_expression gamma rhs in
       if is_type_array lhs_t then
         raise (Utils.raise_semantic_error expr.loc "Cannot reassign an array")
       else if is_type_fun lhs_t then
@@ -54,12 +54,12 @@ let rec get_expression_type gamma expr =
       else
         Utils.raise_semantic_error expr.loc
           ("Cannot assign " ^ show_ttype rhs_t ^ " to " ^ show_ttype lhs_t)
-  | Addr a -> TPtr (get_access_type gamma a)
+  | Addr a -> TPtr (typecheck_access gamma a)
   | ILiteral _ -> TInt
   | BLiteral _ -> TBool
   | CLiteral _ -> TChar
   | UnaryOp (op, ex) -> (
-      match (op, get_expression_type gamma ex) with
+      match (op, typecheck_expression gamma ex) with
       | Neg, TInt -> TInt
       | Neg, _ ->
           Utils.raise_semantic_error expr.loc
@@ -71,7 +71,7 @@ let rec get_expression_type gamma expr =
   | BinaryOp (op, ex1, ex2) -> (
       match
         (* TODO: refactor matching o first then expression types*)
-        (op, get_expression_type gamma ex1, get_expression_type gamma ex2)
+        (op, typecheck_expression gamma ex1, typecheck_expression gamma ex2)
       with
       | Add, TInt, TInt -> TInt
       | Sub, TInt, TInt -> TInt
@@ -174,7 +174,7 @@ let rec get_expression_type gamma expr =
                     ("Too few arguments for function " ^ id)
             (* function with one argument, an argument *)
             | TFun (param_t, ret_t), arg :: [] ->
-                if check_type_equality param_t (get_expression_type gamma arg)
+                if check_type_equality param_t (typecheck_expression gamma arg)
                 then
                   (* a function is returned but we've ended the arguments *)
                   if is_type_fun ret_t then
@@ -186,7 +186,7 @@ let rec get_expression_type gamma expr =
                     ("Wrong argument type when calling" ^ id)
             (* function with one argument, more arguments left *)
             | TFun (param_t, ret_t), arg :: xs ->
-                if check_type_equality param_t (get_expression_type gamma arg)
+                if check_type_equality param_t (typecheck_expression gamma arg)
                 then check_args ret_t xs
                 else
                   Utils.raise_semantic_error expr.loc
@@ -200,7 +200,7 @@ let rec get_expression_type gamma expr =
         else Utils.raise_semantic_error expr.loc (id ^ " is not a function")
       with _ -> Utils.raise_semantic_error expr.loc "Variable not in scope")
 
-and get_access_type gamma access =
+and typecheck_access gamma access =
   match remove_node_annotations access with
   (* get type of variable in case of variable access *)
   | AccVar id -> (
@@ -208,42 +208,48 @@ and get_access_type gamma access =
       with _ -> Utils.raise_semantic_error access.loc "Variable not in scope")
   (* ensure we're dereferencing a pointer *)
   | AccDeref ex -> (
-      let t = get_expression_type gamma ex in
+      let t = typecheck_expression gamma ex in
       match t with
       | TPtr typ -> typ
       | _ -> Utils.raise_semantic_error access.loc "Dereferencing a non-pointer"
       )
   (* ensure we're indexing into an array and that the index is an integer *)
   | AccIndex (b, idx) -> (
-      let array_t = get_access_type gamma b in
+      let array_t = typecheck_access gamma b in
       match array_t with
       | TArray (array_typ, _) ->
-          if check_type_equality (get_expression_type gamma idx) TInt then
+          if check_type_equality (typecheck_expression gamma idx) TInt then
             array_typ
           else Utils.raise_semantic_error access.loc "Index is not an int"
       | _ -> Utils.raise_semantic_error access.loc "Indexing a non-array")
 
 (* return unit instead of tvoid *)
-let rec get_statement_type gamma stmt expected_ret_type =
+let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
   match remove_node_annotations stmt with
   | If (guard, then_stmt, else_stmt) ->
-      if check_type_equality (get_expression_type gamma guard) TBool then
-        let _ = get_statement_type gamma then_stmt expected_ret_type in
-        let _ = get_statement_type gamma else_stmt expected_ret_type in
+      if check_type_equality (typecheck_expression gamma guard) TBool then
+        let _ =
+          typecheck_statement gamma then_stmt expected_ret_type
+            is_parent_function
+        in
+        let _ =
+          typecheck_statement gamma else_stmt expected_ret_type
+            is_parent_function
+        in
         TVoid
       else Utils.raise_semantic_error guard.loc "The if guard must be a boolean"
   | While (guard, stmt) ->
-      if check_type_equality (get_expression_type gamma guard) TBool then
-        get_statement_type gamma stmt expected_ret_type
+      if check_type_equality (typecheck_expression gamma guard) TBool then
+        typecheck_statement gamma stmt expected_ret_type is_parent_function
       else
         Utils.raise_semantic_error guard.loc "The while guard must be a boolean"
   | Expr expr ->
-      let _ = get_expression_type gamma expr in
+      let _ = typecheck_expression gamma expr in
       TVoid
   | Return oexpr -> (
       match oexpr with
       | Some expr ->
-          let expr_t = get_expression_type gamma expr in
+          let expr_t = typecheck_expression gamma expr in
           if check_type_equality expr_t expected_ret_type then TVoid
           else
             Utils.raise_semantic_error expr.loc
@@ -258,12 +264,14 @@ let rec get_statement_type gamma stmt expected_ret_type =
               ^ show_ttype expected_ret_type
               ^ " return type but found void"))
   | Block stmt_list ->
-      let block_gamma = Symbol_table.begin_block gamma in
+      let block_gamma =
+        if is_parent_function then gamma else Symbol_table.begin_block gamma
+      in
       let _ =
         List.iter
           (fun stmt ->
             let _ =
-              get_statement_or_declaration_type block_gamma stmt
+              typecheck_statement_or_declaration block_gamma stmt
                 expected_ret_type
             in
             ())
@@ -272,7 +280,7 @@ let rec get_statement_type gamma stmt expected_ret_type =
       TVoid
 
 (* return unit instead of tvoid *)
-and get_statement_or_declaration_type gamma stmtordec expected_ret_type =
+and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
   match remove_node_annotations stmtordec with
   | Dec (typ, id) -> (
       let t = from_ast_type typ in
@@ -301,6 +309,70 @@ and get_statement_or_declaration_type gamma stmtordec expected_ret_type =
       | _ ->
           let _ = Symbol_table.add_entry id t gamma in
           TVoid)
-  | Stmt stmt -> get_statement_type gamma stmt expected_ret_type
+  | Stmt stmt -> typecheck_statement gamma stmt expected_ret_type false
+
+let typecheck_topdeclaration gamma topdlecl =
+  match remove_node_annotations topdlecl with
+  | Fundecl { typ; fname; formals; body } -> (
+      let fun_gamma = Symbol_table.begin_block gamma in
+      let return_t = from_ast_type typ in
+      match return_t with
+      | TVoid | TBool | TChar | TInt ->
+          let formals_t =
+            List.map (fun (typ, id) -> (from_ast_type typ, id)) formals
+          in
+          let _ =
+            List.iter
+              (fun (t, id) ->
+                match t with
+                | TVoid ->
+                    Utils.raise_semantic_error topdlecl.loc
+                      "Cannot declare a void parameter"
+                | TArray (_, Some size) when size <= 0 ->
+                    Utils.raise_semantic_error topdlecl.loc
+                      "Arrays must have size > 0"
+                | TArray (ta, _) when check_type_equality ta TVoid ->
+                    Utils.raise_semantic_error topdlecl.loc
+                      "Cannot declare an array of void parameter"
+                | TArray (ta, _) when is_type_array ta ->
+                    Utils.raise_semantic_error topdlecl.loc
+                      "Cannot declare a multidimensional array parameter"
+                | TPtr tp when is_type_array tp ->
+                    Utils.raise_semantic_error topdlecl.loc
+                      "Cannot declare a pointer to array parameter"
+                | _ ->
+                    let _ = Symbol_table.add_entry id t fun_gamma in
+                    ())
+              formals_t
+          in
+          (* pass in the expected return type: all inners return statements should be complient *)
+          let _ = typecheck_statement fun_gamma body return_t true in
+          TVoid
+      | _ ->
+          Utils.raise_semantic_error topdlecl.loc
+            "A function can only return void, int, bool, char")
+  | Vardec (typ, id) -> (
+      let t = from_ast_type typ in
+      match t with
+      | TVoid ->
+          Utils.raise_semantic_error topdlecl.loc
+            "Cannot declare a void variable"
+      | TArray (_, None) ->
+          Utils.raise_semantic_error topdlecl.loc
+            "Cannot declare an array without specifiying its size"
+      | TArray (_, Some size) when size <= 0 ->
+          Utils.raise_semantic_error topdlecl.loc "Arrays must have size > 0"
+      | TArray (ta, _) when check_type_equality ta TVoid ->
+          Utils.raise_semantic_error topdlecl.loc
+            "Cannot declare an array of void"
+      | TArray (ta, _) when is_type_array ta ->
+          Utils.raise_semantic_error topdlecl.loc
+            "Cannot declare a multidimensional array"
+      | TPtr tp when is_type_array tp ->
+          Utils.raise_semantic_error topdlecl.loc
+            "Cannot declare a pointer to array"
+      | _ ->
+          let _ = Symbol_table.add_entry id t gamma in
+          TVoid)
 
 let type_check _p = failwith "Not implemented yet"
