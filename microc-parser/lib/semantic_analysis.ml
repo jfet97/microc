@@ -348,7 +348,7 @@ let typecheck_topdeclaration gamma topdlecl =
           in
           let _ = Symbol_table.add_entry fname fun_t gamma in
           (* pass in the expected return type: all inners return statements should be complient *)
-          (* delayed computation to add all the functions to the global scope firstly *)
+          (* delayed computation to firstly add all the functions to the global scope *)
           fun () ->
             let _ = typecheck_statement fun_gamma body return_t true in
             TVoid
