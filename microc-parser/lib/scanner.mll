@@ -39,8 +39,8 @@ let one_to_nine = ['1'-'9']
 let one_to_f = ['1'-'9' 'A'-'F']
 let alpha = ['a'-'z' 'A'-'Z']
 
-let num_base10 = ('-'? one_to_nine digit_base10*) | '0'
-let num_base16 = ('-'? "0x" one_to_f digit_base16) | "0x0"
+let num_base10 = (one_to_nine digit_base10*) | '0'
+let num_base16 = ("0x" one_to_f digit_base16) | "0x0"
 let id = ('_' | alpha)('_' | alpha | digit_base10)*
 let boolean = "true" | "false"
 
