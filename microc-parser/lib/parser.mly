@@ -70,7 +70,7 @@ topdecl:
       Ast.Vardec(t, id) |@| loc
     }
   | fundecl
-    { Ast.Fundecl($1) |@| (Location.to_code_position $loc) }
+    { Ast.Fundecl(fst $1) |@| (snd $1) }
   ;
 
 vardecl_sem:
@@ -120,12 +120,15 @@ vardesc:
 fundecl:
   | typ ID LEFT_PAREN separated_list(COMMA, vardecl) RIGHT_PAREN block                      
     {
-      {
-        Ast.typ = $1;
-        Ast.fname = $2;
-        Ast.formals = $4;
-        Ast.body = $6;
-      } 
+      (
+        {
+          Ast.typ = $1;
+          Ast.fname = $2;
+          Ast.formals = $4;
+          Ast.body = $6;
+        },
+        (Location.to_code_position $loc)
+      )
     }
   ;
 

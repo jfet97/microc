@@ -5,7 +5,7 @@ let raise_semantic_error code_position msg =
 
 open Ast
 
-(* these are the actual types of our entities, functions included, the one from ast were just annotations *)
+(* these are the actual types of our entities, functions included, the ones from ast were just annotations *)
 type ttype =
   | TInt
   | TBool
@@ -40,6 +40,15 @@ let is_type_fun t = match t with TFun (_, _) -> true | _ -> false
 
 let remove_node_annotations annotated_node =
   match annotated_node with { loc; node } -> node
+
+let st_lookup_rethrow id gamma code_position msg =
+  try Symbol_table.lookup id gamma
+  with _ -> raise_semantic_error code_position msg
+
+let st_add_entry_rethrow id t st code_position =
+  try Symbol_table.add_entry id t st
+  with _ ->
+    raise_semantic_error code_position ("Cannot redeclare symbol " ^ id)
 
 let rec typecheck_expression gamma expr =
   match remove_node_annotations expr with
@@ -167,7 +176,7 @@ let rec typecheck_expression gamma expr =
            ^ " operator's arguments must have the same type"))
   | Call (id, args) ->
       (* let _ = Symbol_table.print_keys gamma in *)
-      let fun_t = Symbol_table.lookup id gamma in
+      let fun_t = st_lookup_rethrow id gamma expr.loc "Function not in scope" in
       if is_type_fun fun_t then
         let rec check_args ft args =
           match (ft, args) with
@@ -204,9 +213,7 @@ let rec typecheck_expression gamma expr =
 and typecheck_access gamma access =
   match remove_node_annotations access with
   (* get type of variable in case of variable access *)
-  | AccVar id -> (
-      try match Symbol_table.lookup id gamma with t -> t
-      with _ -> raise_semantic_error access.loc "Variable not in scope")
+  | AccVar id -> st_lookup_rethrow id gamma access.loc "Variable not in scope"
   (* ensure we're dereferencing a pointer *)
   | AccDeref ex -> (
       let t = typecheck_expression gamma ex in
@@ -241,7 +248,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
   | While (guard, stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         typecheck_statement gamma stmt expected_ret_type is_parent_function
-      else raise_semantic_error guard.loc "The while guard must be a boolean"
+      else raise_semantic_error guard.loc "The guard must be a boolean"
   | Expr expr ->
       let _ = typecheck_expression gamma expr in
       TVoid
@@ -303,12 +310,12 @@ and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
       | TPtr tp when is_type_array tp ->
           raise_semantic_error stmtordec.loc "Cannot declare a pointer to array"
       | _ ->
-          let _ = Symbol_table.add_entry id t gamma in
+          let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
           TVoid)
   | Stmt stmt -> typecheck_statement gamma stmt expected_ret_type false
 
-let typecheck_topdeclaration gamma topdlecl =
-  match remove_node_annotations topdlecl with
+let typecheck_topdeclaration gamma topdecl =
+  match remove_node_annotations topdecl with
   | Fundecl { typ; fname; formals; body } -> (
       let fun_gamma = Symbol_table.begin_block gamma in
       let return_t = from_ast_type typ in
@@ -323,22 +330,21 @@ let typecheck_topdeclaration gamma topdlecl =
               (fun (t, id) ->
                 match t with
                 | TVoid ->
-                    raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdecl.loc
                       "Cannot declare a void parameter"
                 | TArray (_, Some size) when size <= 0 ->
-                    raise_semantic_error topdlecl.loc
-                      "Arrays must have size > 0"
+                    raise_semantic_error topdecl.loc "Arrays must have size > 0"
                 | TArray (ta, _) when check_type_equality ta TVoid ->
-                    raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdecl.loc
                       "Cannot declare an array of void parameter"
                 | TArray (ta, _) when is_type_array ta ->
-                    raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdecl.loc
                       "Cannot declare a multidimensional array parameter"
                 | TPtr tp when is_type_array tp ->
-                    raise_semantic_error topdlecl.loc
+                    raise_semantic_error topdecl.loc
                       "Cannot declare a pointer to array parameter"
                 | _ ->
-                    let _ = Symbol_table.add_entry id t fun_gamma in
+                    let _ = st_add_entry_rethrow id t fun_gamma topdecl.loc in
                     ())
               formals_t
           in
@@ -350,34 +356,34 @@ let typecheck_topdeclaration gamma topdlecl =
               else formals_t)
               return_t
           in
-          let _ = Symbol_table.add_entry fname fun_t gamma in
+          let _ = st_add_entry_rethrow fname fun_t gamma topdecl.loc in
           (* pass in the expected return type: all inners return statements should be complient *)
           (* delayed computation to firstly add all the functions to the global scope *)
           fun () ->
             let _ = typecheck_statement fun_gamma body return_t true in
             TVoid
       | _ ->
-          raise_semantic_error topdlecl.loc
+          raise_semantic_error topdecl.loc
             "A function can only return void, int, bool, char")
   | Vardec (typ, id) -> (
       let t = from_ast_type typ in
       match t with
       | TVoid ->
-          raise_semantic_error topdlecl.loc "Cannot declare a void variable"
+          raise_semantic_error topdecl.loc "Cannot declare a void variable"
       | TArray (_, None) ->
-          raise_semantic_error topdlecl.loc
+          raise_semantic_error topdecl.loc
             "Cannot declare an array without specifiying its size"
       | TArray (_, Some size) when size <= 0 ->
-          raise_semantic_error topdlecl.loc "Arrays must have size > 0"
+          raise_semantic_error topdecl.loc "Arrays must have size > 0"
       | TArray (ta, _) when check_type_equality ta TVoid ->
-          raise_semantic_error topdlecl.loc "Cannot declare an array of void"
+          raise_semantic_error topdecl.loc "Cannot declare an array of void"
       | TArray (ta, _) when is_type_array ta ->
-          raise_semantic_error topdlecl.loc
+          raise_semantic_error topdecl.loc
             "Cannot declare a multidimensional array"
       | TPtr tp when is_type_array tp ->
-          raise_semantic_error topdlecl.loc "Cannot declare a pointer to array"
+          raise_semantic_error topdecl.loc "Cannot declare a pointer to array"
       | _ ->
-          let _ = Symbol_table.add_entry id t gamma in
+          let _ = st_add_entry_rethrow id t gamma topdecl.loc in
           fun () -> TVoid)
 
 let type_check p =
@@ -386,12 +392,15 @@ let type_check p =
       let global = Symbol_table.begin_block Symbol_table.empty_table in
       let _ = Symbol_table.add_entry "getint" (TFun (TVoid, TInt)) global in
       let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
-      (* let _ = Symbol_table.print_keys global in *)
+
       let delayed_bodies_check =
         List.map
           (fun topdecl -> typecheck_topdeclaration global topdecl)
           program
       in
-      (* let _ = Symbol_table.print_keys global in *)
+      let _ =
+        st_lookup_rethrow "main" global Location.dummy_code_pos
+          "Missing main function"
+      in
       let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_check in
       p
