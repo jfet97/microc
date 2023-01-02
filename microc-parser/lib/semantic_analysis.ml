@@ -83,97 +83,48 @@ let rec typecheck_expression gamma expr =
           raise_semantic_error expr.loc
             "The unary ! operator must be applied to a boolean")
   | BinaryOp (op, ex1, ex2) -> (
-      match
-        (* TODO: refactor matching o first then expression types*)
-        (op, typecheck_expression gamma ex1, typecheck_expression gamma ex2)
-      with
-      | Add, TInt, TInt -> TInt
-      | Sub, TInt, TInt -> TInt
-      | Mult, TInt, TInt -> TInt
-      | Div, TInt, TInt -> TInt
-      | Mod, TInt, TInt -> TInt
-      | Equal, TInt, TInt -> TBool
-      | Neq, TInt, TInt -> TBool
-      | Less, TInt, TInt -> TBool
-      | Leq, TInt, TInt -> TBool
-      | Greater, TInt, TInt -> TBool
-      | Geq, TInt, TInt -> TBool
-      | And, TBool, TBool -> TBool
-      | Or, TBool, TBool -> TBool
-      | Equal, TBool, TBool -> TBool
-      | Equal, TChar, TChar -> TBool
-      | Equal, TArray (_, _), TArray (_, _) ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator cannot be applied to arrays")
-      | Equal, TFun (_, _), TFun (_, _) ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator cannot be applied to functions")
-      | Equal, TPtr tp1, TPtr tp2 when check_type_equality tp1 tp2 -> TBool
-      | Neq, TBool, TBool -> TBool
-      | Neq, TChar, TChar -> TBool
-      | Neq, TArray (_, _), TArray (_, _) ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator cannot be applied to arrays")
-      | Neq, TFun (_, _), TFun (_, _) ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator cannot be applied to functions")
-      | Neq, TPtr tp1, TPtr tp2 when check_type_equality tp1 tp2 -> TBool
-      | Add, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Sub, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Mult, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Div, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Mod, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Less, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Leq, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Greater, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | Geq, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be numbers")
-      | And, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be booleans")
-      | Or, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must be booleans")
-      | Equal, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must have the same type")
-      | Neq, _, _ ->
-          raise_semantic_error expr.loc
-            ("The binary " ^ Ast.show_binop op
-           ^ " operator's arguments must have the same type"))
+      let ex1_t = typecheck_expression gamma ex1 in
+      let ex2_t = typecheck_expression gamma ex2 in
+      match op with
+      | Add | Sub | Mult | Div | Mod -> (
+          match (ex1_t, ex2_t) with
+          | TInt, TInt -> TInt
+          | _, _ ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator's arguments must be numbers"))
+      | Less | Leq | Greater | Geq -> (
+          match (ex1_t, ex2_t) with
+          | TInt, TInt -> TBool
+          | _, _ ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator's arguments must be numbers"))
+      | And | Or -> (
+          match (ex1_t, ex2_t) with
+          | TBool, TBool -> TBool
+          | _, _ ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator's arguments must be booleans"))
+      | Equal | Neq -> (
+          match (ex1_t, ex2_t) with
+          | TInt, TInt -> TBool
+          | TBool, TBool -> TBool
+          | TChar, TChar -> TBool
+          | TPtr tp1, TPtr tp2 when check_type_equality tp1 tp2 -> TBool
+          | TArray (_, _), TArray (_, _) ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator cannot be applied to arrays")
+          | TFun (_, _), TFun (_, _) ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator cannot be applied to functions")
+          | _, _ ->
+              raise_semantic_error expr.loc
+                ("The binary " ^ Ast.show_binop op
+               ^ " operator's arguments must have the same type")))
   | Call (id, args) ->
       (* let _ = Symbol_table.print_keys gamma in *)
       let fun_t = st_lookup_rethrow id gamma expr.loc "Function not in scope" in
@@ -285,7 +236,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
         List.fold_left
           (fun ret_until_here stmt ->
             if ret_until_here then
-              (* the previous stmt has returned, so the current one and the enxt ones will never be executed *)
+              (* the previous stmt has returned, so the current one and the next ones will never be executed *)
               raise_semantic_error stmt.loc "Dead code detected"
             else
               typecheck_statement_or_declaration block_gamma stmt
