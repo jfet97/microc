@@ -235,35 +235,43 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
   match remove_node_annotations stmt with
   | If (guard, then_stmt, else_stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
-        let _ =
+        let does_then_ret =
           typecheck_statement gamma then_stmt expected_ret_type
             is_parent_function
         in
-        let _ =
+        let does_else_ret =
           typecheck_statement gamma else_stmt expected_ret_type
             is_parent_function
         in
-        TVoid
+        (* an if clause returns iff both branchess return *)
+        does_then_ret && does_else_ret
       else raise_semantic_error guard.loc "The if guard must be a boolean"
   | While (guard, stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
-        typecheck_statement gamma stmt expected_ret_type is_parent_function
+        let does_body_ret =
+          typecheck_statement gamma stmt expected_ret_type is_parent_function
+        in
+        (* even if the body of the while returns, the guard could be immediately false *)
+        false && does_body_ret
       else raise_semantic_error guard.loc "The guard must be a boolean"
   | Expr expr ->
       let _ = typecheck_expression gamma expr in
-      TVoid
+      (* an expression by itself does not return *)
+      false
   | Return oexpr -> (
       match oexpr with
       | Some expr ->
           let expr_t = typecheck_expression gamma expr in
-          if check_type_equality expr_t expected_ret_type then TVoid
+          (* a return expression obviously returns *)
+          if check_type_equality expr_t expected_ret_type then true
           else
             raise_semantic_error expr.loc
               ("Expected "
               ^ show_ttype expected_ret_type
               ^ " return type but found " ^ show_ttype expr_t)
       | None ->
-          if check_type_equality TVoid expected_ret_type then TVoid
+          (* a return expression obviously returns *)
+          if check_type_equality TVoid expected_ret_type then true
           else
             raise_semantic_error stmt.loc
               ("Expected "
@@ -273,17 +281,19 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
       let block_gamma =
         if is_parent_function then gamma else Symbol_table.begin_block gamma
       in
-      let _ =
-        List.iter
-          (fun stmt ->
-            let _ =
+      let there_is_ret =
+        List.fold_left
+          (fun ret_until_here stmt ->
+            if ret_until_here then
+              (* the previous stmt has returned, so the current one and the enxt ones will never be executed *)
+              raise_semantic_error stmt.loc "Dead code detected"
+            else
               typecheck_statement_or_declaration block_gamma stmt
-                expected_ret_type
-            in
-            ())
-          stmt_list
+                expected_ret_type)
+          false stmt_list
       in
-      TVoid
+      (* a block returns if the last statement returns, whatever it is *)
+      there_is_ret
 
 (* return unit instead of tvoid *)
 and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
@@ -311,7 +321,9 @@ and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
           raise_semantic_error stmtordec.loc "Cannot declare a pointer to array"
       | _ ->
           let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
-          TVoid)
+          (* a declaration does not return *)
+          false
+      (* a Stmt returns iff the inner stmt returns *))
   | Stmt stmt -> typecheck_statement gamma stmt expected_ret_type false
 
 let typecheck_topdeclaration gamma topdecl =

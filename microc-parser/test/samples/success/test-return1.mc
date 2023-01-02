@@ -3,5 +3,5 @@ int main(){
     i = 2;
     print(i);
     return 0;
-    print(i);
+    // print(i); // <-- found by dead code
 }
