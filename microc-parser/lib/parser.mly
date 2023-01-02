@@ -78,7 +78,6 @@ vardecl_sem:
     { (fst $1, snd $1, Location.to_code_position $loc) }
   ;
 
-(* TODO: solo un void o un array di void non è okay, un array di puntatori a void si, un puntatore ad un array di void no, un puntatore a void si, un array di puntatori a void si, quando ok usare [] *)
 vardecl:
   | typ vardesc
     { 
