@@ -217,17 +217,17 @@ and typecheck_access gamma access =
       | _ -> raise_semantic_error access.loc "Indexing a non-array")
 
 (* return unit instead of tvoid *)
-let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
+let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
   match remove_node_annotations stmt with
   | If (guard, then_stmt, else_stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         let does_then_ret =
           typecheck_statement gamma then_stmt expected_ret_type
-            is_parent_function
+            false
         in
         let does_else_ret =
           typecheck_statement gamma else_stmt expected_ret_type
-            is_parent_function
+            false
         in
         (* an if clause returns iff both branchess return *)
         does_then_ret && does_else_ret
@@ -235,7 +235,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
   | While (guard, stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         let does_body_ret =
-          typecheck_statement gamma stmt expected_ret_type is_parent_function
+          typecheck_statement gamma stmt expected_ret_type false
         in
         (* even if the body of the while returns, the guard could be immediately false *)
         false && does_body_ret
@@ -265,7 +265,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
               ^ " return type but found void"))
   | Block stmt_list ->
       let block_gamma =
-        if is_parent_function then gamma else Symbol_table.begin_block gamma
+        if is_function_block then gamma else Symbol_table.begin_block gamma
       in
       let there_is_ret =
         List.fold_left
@@ -324,14 +324,14 @@ let typecheck_topdeclaration gamma topdecl =
           (* delayed computation to firstly add all the functions to the global scope *)
           fun () ->
             let _ = typecheck_statement fun_gamma body return_t true in
-            TVoid
+            ()
       | _ ->
           raise_semantic_error topdecl.loc
             "A function can only return void, int, bool, char")
   | Vardec (typ, id) ->
       let t = check_variable_type (from_ast_type typ) topdecl.loc in
       let _ = st_add_entry_rethrow id t gamma topdecl.loc in
-      fun () -> TVoid
+      fun () -> ()
 
 let type_check p =
   match p with
