@@ -340,6 +340,7 @@ let type_check p =
       let _ = Symbol_table.add_entry "getint" (TFun (TVoid, TInt)) global in
       let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
 
+      (* check and store functions' declarations in the global environment *)
       let delayed_bodies_check =
         List.map
           (fun topdecl -> typecheck_topdeclaration global topdecl)
@@ -349,5 +350,6 @@ let type_check p =
         st_lookup_rethrow "main" global Location.dummy_code_pos
           "Missing main function"
       in
+      (* check functions' bodies *)
       let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_check in
       p
