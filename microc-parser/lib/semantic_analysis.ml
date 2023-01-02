@@ -13,6 +13,7 @@ type ttype =
   | TVoid
   | TPtr of ttype
   | TArray of ttype * int option
+  (* currying: argument, return *)
   | TFun of ttype * ttype
 [@@deriving show]
 
@@ -49,6 +50,40 @@ let st_add_entry_rethrow id t st code_position =
   try Symbol_table.add_entry id t st
   with _ ->
     raise_semantic_error code_position ("Cannot redeclare symbol " ^ id)
+
+let check_variable_type t loc =
+  match t with
+  | TVoid -> raise_semantic_error loc "Cannot declare a void variable"
+  | TArray (_, None) ->
+      raise_semantic_error loc
+        "Cannot declare an array without specifiying its size"
+  | TArray (_, Some size) when size <= 0 ->
+      raise_semantic_error loc "Arrays must have size > 0"
+  | TArray (ta, _) when check_type_equality ta TVoid ->
+      raise_semantic_error loc "Cannot declare an array of void"
+  (* NOT EXPRESSIBLE AS DECLARATION IN THE AST *)
+  (* | TArray (ta, _) when is_type_fun ta ->
+      raise_semantic_error loc
+        "Cannot declare an array of functions" *)
+  | TArray (ta, _) when is_type_array ta ->
+      raise_semantic_error loc "Cannot declare a multidimensional array"
+  | TPtr tp when is_type_array tp ->
+      raise_semantic_error loc "Cannot declare a pointer to array"
+  | _ -> t
+
+let check_parameter_type t loc =
+  match t with
+  | TVoid -> raise_semantic_error loc "Cannot declare a void parameter"
+  | TArray (_, Some size) when size <= 0 ->
+      raise_semantic_error loc "Arrays must have size > 0"
+  | TArray (ta, _) when check_type_equality ta TVoid ->
+      raise_semantic_error loc "Cannot declare an array of void parameter"
+  | TArray (ta, _) when is_type_array ta ->
+      raise_semantic_error loc
+        "Cannot declare a multidimensional array parameter"
+  | TPtr tp when is_type_array tp ->
+      raise_semantic_error loc "Cannot declare a pointer to array parameter"
+  | _ -> t
 
 let rec typecheck_expression gamma expr =
   match remove_node_annotations expr with
@@ -249,32 +284,12 @@ let rec typecheck_statement gamma stmt expected_ret_type is_parent_function =
 (* return unit instead of tvoid *)
 and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
   match remove_node_annotations stmtordec with
-  | Dec (typ, id) -> (
-      let t = from_ast_type typ in
-      match t with
-      | TVoid ->
-          raise_semantic_error stmtordec.loc "Cannot declare a void variable"
-      | TArray (_, None) ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare an array without specifiying its size"
-      | TArray (_, Some size) when size <= 0 ->
-          raise_semantic_error stmtordec.loc "Arrays must have size > 0"
-      | TArray (ta, _) when check_type_equality ta TVoid ->
-          raise_semantic_error stmtordec.loc "Cannot declare an array of void"
-      (* NON ESPRIMIBILE COME DICHIARAZIONE NELL'AST*)
-      (* | TArray (ta, _) when is_type_fun ta ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare an array of functions" *)
-      | TArray (ta, _) when is_type_array ta ->
-          raise_semantic_error stmtordec.loc
-            "Cannot declare a multidimensional array"
-      | TPtr tp when is_type_array tp ->
-          raise_semantic_error stmtordec.loc "Cannot declare a pointer to array"
-      | _ ->
-          let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
-          (* a declaration does not return *)
-          false
-      (* a Stmt returns iff the inner stmt returns *))
+  | Dec (typ, id) ->
+      let t = check_variable_type (from_ast_type typ) stmtordec.loc in
+      let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
+      (* a declaration does not return *)
+      false
+      (* a Stmt returns iff the inner stmt returns *)
   | Stmt stmt -> typecheck_statement gamma stmt expected_ret_type false
 
 let typecheck_topdeclaration gamma topdecl =
@@ -291,24 +306,9 @@ let typecheck_topdeclaration gamma topdecl =
           let _ =
             List.iter
               (fun (t, id) ->
-                match t with
-                | TVoid ->
-                    raise_semantic_error topdecl.loc
-                      "Cannot declare a void parameter"
-                | TArray (_, Some size) when size <= 0 ->
-                    raise_semantic_error topdecl.loc "Arrays must have size > 0"
-                | TArray (ta, _) when check_type_equality ta TVoid ->
-                    raise_semantic_error topdecl.loc
-                      "Cannot declare an array of void parameter"
-                | TArray (ta, _) when is_type_array ta ->
-                    raise_semantic_error topdecl.loc
-                      "Cannot declare a multidimensional array parameter"
-                | TPtr tp when is_type_array tp ->
-                    raise_semantic_error topdecl.loc
-                      "Cannot declare a pointer to array parameter"
-                | _ ->
-                    let _ = st_add_entry_rethrow id t fun_gamma topdecl.loc in
-                    ())
+                let t = check_parameter_type t topdecl.loc in
+                let _ = st_add_entry_rethrow id t fun_gamma topdecl.loc in
+                ())
               formals_t
           in
           (* add the function into the global scope *)
@@ -320,7 +320,7 @@ let typecheck_topdeclaration gamma topdecl =
               return_t
           in
           let _ = st_add_entry_rethrow fname fun_t gamma topdecl.loc in
-          (* pass in the expected return type: all inners return statements should be complient *)
+          (* pass in the expected return type: all inners return statements should be compliant *)
           (* delayed computation to firstly add all the functions to the global scope *)
           fun () ->
             let _ = typecheck_statement fun_gamma body return_t true in
@@ -328,26 +328,10 @@ let typecheck_topdeclaration gamma topdecl =
       | _ ->
           raise_semantic_error topdecl.loc
             "A function can only return void, int, bool, char")
-  | Vardec (typ, id) -> (
-      let t = from_ast_type typ in
-      match t with
-      | TVoid ->
-          raise_semantic_error topdecl.loc "Cannot declare a void variable"
-      | TArray (_, None) ->
-          raise_semantic_error topdecl.loc
-            "Cannot declare an array without specifiying its size"
-      | TArray (_, Some size) when size <= 0 ->
-          raise_semantic_error topdecl.loc "Arrays must have size > 0"
-      | TArray (ta, _) when check_type_equality ta TVoid ->
-          raise_semantic_error topdecl.loc "Cannot declare an array of void"
-      | TArray (ta, _) when is_type_array ta ->
-          raise_semantic_error topdecl.loc
-            "Cannot declare a multidimensional array"
-      | TPtr tp when is_type_array tp ->
-          raise_semantic_error topdecl.loc "Cannot declare a pointer to array"
-      | _ ->
-          let _ = st_add_entry_rethrow id t gamma topdecl.loc in
-          fun () -> TVoid)
+  | Vardec (typ, id) ->
+      let t = check_variable_type (from_ast_type typ) topdecl.loc in
+      let _ = st_add_entry_rethrow id t gamma topdecl.loc in
+      fun () -> TVoid
 
 let type_check p =
   match p with
