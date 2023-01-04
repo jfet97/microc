@@ -35,8 +35,8 @@ let next_target_label () =
   target_register_counter := !target_register_counter + 1;
   "r" ^ string_of_int !target_register_counter
 
-let build_op op =
-  let prelude =
+let build_bop op ll1 ll2 =
+  let prelude_bop =
     [
       (Add, L.build_add);
       (Mult, L.build_mul);
@@ -53,20 +53,32 @@ let build_op op =
       (Or, L.build_or);
     ]
   in
-  (List.find (fun o -> o == op) prelude, next_target_label ())
+  snd
+    (List.find (fun o -> fst o == op) prelude_bop)
+    ll1 ll2 (next_target_label ())
+
+let build_uop op ll =
+  let prelude_uop = [ (Neg, L.build_neg); (Not, L.build_not) ] in
+  snd (List.find (fun o -> fst o == op) prelude_uop) ll (next_target_label ())
 
 let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
+
+let to_null_if_llvalue_undef v =
+  if L.is_undef v then L.const_pointer_null (L.pointer_type (L.type_of v))
+  else v
 
 (* Codegen for expr node *)
 let rec codegen_expr gamma ibuilder e =
   match remove_node_annotations e with
+  (* an expression can be an access to a lexpr *)
   | Access le -> (
-      let var = codegen_le gamma ibuilder le in
-      match L.classify_type (L.element_type (L.type_of var)) with
+      let le_ll = codegen_le gamma ibuilder le in
+      match L.classify_type (L.element_type (L.type_of le_ll)) with
       (* it's a reference, no need to load it *)
-      | Array -> var
+      | Array -> le_ll
       (* load from memory *)
-      | _ -> build_load var ibuilder)
+      | _ -> build_load le_ll ibuilder)
+  (* or an rexpr *)
   | _ -> codegen_re gamma ibuilder e
 
 and codegen_ae gamma ibuilder e =
@@ -75,6 +87,7 @@ and codegen_ae gamma ibuilder e =
   | ILiteral i -> L.const_int int_ll i
   | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
   | CLiteral c -> L.const_int char_ll (int_of_char c)
+  | Null -> L.undef (L.pointer_type void_ll)
   | _ -> codegen_re gamma ibuilder e
 
 and codegen_le gamma ibuilder e =
@@ -100,10 +113,19 @@ and codegen_le gamma ibuilder e =
 and codegen_re gamma ibuilder e =
   match remove_node_annotations e with
   | Assign (le, e) ->
-      let le_ll = codegen_le gamma ibuilder le in
-      let e_ll = codegen_expr gamma ibuilder e in
+      let le_ll = to_null_if_llvalue_undef (codegen_le gamma ibuilder le) in
+      let e_ll = to_null_if_llvalue_undef (codegen_expr gamma ibuilder e) in
       let _ = L.build_store e_ll le_ll ibuilder in
       build_load le_ll ibuilder
+  | UnaryOp (uop, e) -> (
+      (* TODO: same code*)
+      match uop with
+      | Not ->
+          let e_ll = codegen_expr gamma ibuilder e in
+          build_uop uop e_ll ibuilder
+      | Neg ->
+          let e_ll = codegen_expr gamma ibuilder e in
+          build_uop uop e_ll ibuilder)
   | _ -> codegen_ae gamma ibuilder e
 
 (* Declare in the current module the print prototype *)

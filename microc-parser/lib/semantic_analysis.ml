@@ -208,6 +208,7 @@ and typecheck_access gamma access =
       let t = typecheck_expression gamma ex in
       match t with
       | TPtr typ -> typ
+      | TNull -> raise_semantic_error access.loc "Dereferencing a NULL pointer"
       | _ -> raise_semantic_error access.loc "Dereferencing a non-pointer")
   (* ensure we're indexing into an array and that the index is an integer *)
   | AccIndex (b, idx) -> (
