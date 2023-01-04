@@ -284,7 +284,7 @@ aexpr:
   | NULL
     { 
       let loc = Location.to_code_position $loc in
-      Ast.ILiteral(0) |@| loc 
+      Ast.Null |@| loc 
     }
   | AMPERSAND lexpr
     { 

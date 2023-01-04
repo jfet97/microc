@@ -11,6 +11,7 @@ type ttype =
   | TBool
   | TChar
   | TVoid
+  | TNull
   | TPtr of ttype
   | TArray of ttype * int option
   (* currying: argument, return *)
@@ -34,6 +35,7 @@ let rec check_type_equality t1 t2 =
       size1 == size2 && check_type_equality ta1 ta2
   | TArray (ta1, _), TArray (ta2, _) -> check_type_equality ta1 ta2
   | TPtr tp1, TPtr tp2 -> check_type_equality tp1 tp2
+  | TPtr _, TNull | TNull, TPtr _ -> true
   | x, y -> if x = y then true else false
 
 let is_type_array t = match t with TArray (_, _) -> true | _ -> false
@@ -107,6 +109,7 @@ let rec typecheck_expression gamma expr =
       else TInt
   | BLiteral _ -> TBool
   | CLiteral _ -> TChar
+  | Null -> TNull
   | UnaryOp (op, ex) -> (
       match (op, typecheck_expression gamma ex) with
       | Neg, TInt -> TInt
