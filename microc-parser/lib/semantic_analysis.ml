@@ -222,12 +222,10 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
   | If (guard, then_stmt, else_stmt) ->
       if check_type_equality (typecheck_expression gamma guard) TBool then
         let does_then_ret =
-          typecheck_statement gamma then_stmt expected_ret_type
-            false
+          typecheck_statement gamma then_stmt expected_ret_type false
         in
         let does_else_ret =
-          typecheck_statement gamma else_stmt expected_ret_type
-            false
+          typecheck_statement gamma else_stmt expected_ret_type false
         in
         (* an if clause returns iff both branchess return *)
         does_then_ret && does_else_ret
@@ -327,6 +325,7 @@ let typecheck_topdeclaration gamma topdecl =
             ()
       | _ ->
           raise_semantic_error topdecl.loc
+            (* currently the language itself does not accept functions that do not return  void, int, bool, char *)
             "A function can only return void, int, bool, char")
   | Vardec (typ, id) ->
       let t = check_variable_type (from_ast_type typ) topdecl.loc in
