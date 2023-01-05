@@ -30,7 +30,7 @@
 %token LEFT_CURLY RIGHT_CURLY
 %token RETURN
 %token IF ELSE
-%token WHILE FOR
+%token WHILE FOR DO
 
 %token EOF
 /* Precedence and associativity specification */
@@ -131,7 +131,6 @@ fundecl:
     }
   ;
 
-(* TODO *)
 block:
   | LEFT_CURLY list(block_entry) RIGHT_CURLY
     {
@@ -170,6 +169,14 @@ stmt:
     { 
       let loc = Location.to_code_position $loc in
       Ast.While($3, $5) |@| loc
+    }
+  | DO stmt WHILE LEFT_PAREN expr RIGHT_PAREN SEMICOLON
+    { 
+      (* do while -> while rewriting *)
+      let loc = Location.to_code_position $loc in
+      let stmt_loc = Location.to_code_position($startpos($2), $endpos($2)) in
+      let expr_loc = Location.to_code_position($startpos($5), $endpos($5)) in
+      Ast.Block([Ast.Stmt($2) |@| stmt_loc ; Ast.Stmt(Ast.While($5, $2) |@| loc) |@| loc]) |@| loc
     }
   | FOR LEFT_PAREN option(expr) SEMICOLON option(expr) SEMICOLON option(expr) RIGHT_PAREN stmt
     {

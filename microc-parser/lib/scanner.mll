@@ -16,6 +16,7 @@
       ("else", ELSE);
       ("for", FOR);
       ("while", WHILE);
+      ("do", DO);
       ("return", RETURN);
       ("int", INT_T);
       ("bool", BOOL_T);
