@@ -63,6 +63,13 @@ let build_uop op ll =
 
 let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
 
+let get_value_at_addr addr ibuilder =
+  match L.classify_type (L.element_type (L.type_of addr)) with
+  (* it's a reference, no need to load it *)
+  | L.TypeKind.Array -> addr
+  (* load from memory *)
+  | _ -> build_load addr ibuilder
+
 let to_null_if_llvalue_undef v =
   if L.is_undef v then L.const_pointer_null (L.pointer_type (L.type_of v))
   else v
@@ -127,6 +134,23 @@ and codegen_re gamma ibuilder e =
           let e_ll = codegen_expr gamma ibuilder e in
           build_uop uop e_ll ibuilder)
   | _ -> codegen_ae gamma ibuilder e
+
+let rec codegen_expression gamma ibuilder expr should_ret_value =
+  match remove_node_annotations expr with
+  | ILiteral i -> L.const_int int_ll i
+  | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
+  | CLiteral c -> L.const_int char_ll (int_of_char c)
+  | Null -> L.const_pointer_null (L.pointer_type void_ll)
+  | Access a ->
+      codegen_access gamma ibuilder should_ret_value a should_ret_value
+  | _ -> failwith "banane"
+
+and codegen_access gamma ibuilder access should_ret_value =
+  match remove_node_annotations access with
+  | AccVar id ->
+      let addr = Symbol_table.lookup id gamma in
+      addr
+  | _ -> failwith "meloni"
 
 (* Declare in the current module the print prototype *)
 let print_ll llvm_module global_scope =
