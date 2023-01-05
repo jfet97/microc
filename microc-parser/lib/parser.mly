@@ -64,18 +64,12 @@ program:
   ;
 
 topdecl:
-  | vardecl_sem
+  | vardecl_init_list
     { 
-      let (t, id, loc) = $1 in
-      Ast.Vardec(t, id) |@| loc
+      Ast.Vardec($1) |@| Location.to_code_position $loc
     }
   | fundecl
     { Ast.Fundecl(fst $1) |@| (snd $1) }
-  ;
-
-vardecl_sem:
-  | vardecl SEMICOLON
-    { (fst $1, snd $1, Location.to_code_position $loc) }
   ;
 
 vardecl:
@@ -91,6 +85,32 @@ vardecl:
       in (tt, fst $2)
     }
   ;
+
+assign_expr:
+  | ASSIGN expr
+    { $2 }
+  ;
+
+vardecl_init_list:
+  | typ separated_nonempty_list(COMMA, pair(vardesc, option(assign_expr))) SEMICOLON
+    { 
+      let ftvd t vd = 
+        match vd with
+          | VarDescStar -> Ast.TypP t
+          | VarDescParens -> t
+          | VarDescArr oi -> Ast.TypA (t, oi)
+      in
+      List.map (fun vint -> 
+        let vdesc = fst vint in
+        let oinite = snd vint in
+        let tt = List.fold_left ftvd $1 (snd vdesc)
+        in (tt, fst vdesc, oinite)
+      ) $2
+    }
+  ;
+
+
+
 
 typ:
   | INT_T
@@ -139,10 +159,9 @@ block:
   ;
 
 block_entry:
-  | vardecl_sem
+  | vardecl_init_list
     { 
-      let (t, id, loc) = $1 in
-      Ast.Dec(t, id) |@| loc
+       Ast.Dec($1) |@| Location.to_code_position $loc
     }
   | stmt
     {

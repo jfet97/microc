@@ -84,6 +84,38 @@ let add_terminal ibuilder f =
   | Some _ -> ()
   | None -> f ibuilder |> ignore
 
+let evaluate_const_expr expr =
+  let prelude_const_bop =
+    [
+      (Add, L.const_add);
+      (Mult, L.const_mul);
+      (Sub, L.const_sub);
+      (Div, L.const_sdiv);
+      (Mod, L.const_srem);
+      (Less, L.const_icmp L.Icmp.Slt);
+      (Leq, L.const_icmp L.Icmp.Sle);
+      (Greater, L.const_icmp L.Icmp.Sgt);
+      (Geq, L.const_icmp L.Icmp.Sge);
+      (Equal, L.const_icmp L.Icmp.Eq);
+      (Neq, L.const_icmp L.Icmp.Ne);
+      (And, L.const_and);
+      (Or, L.const_or);
+    ]
+  in
+  let prelude_const_uop = [ (Not, L.const_not); (Neg, L.const_neg) ] in
+  let rec aux expr =
+    match remove_node_annotations expr with
+    | ILiteral i -> L.const_int int_ll i
+    | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
+    | CLiteral c -> L.const_int char_ll (int_of_char c)
+    | UnaryOp (op, expr) -> List.assoc op prelude_const_uop (aux expr)
+    | BinaryOp (bop, expr1, expr2) ->
+        List.assoc bop prelude_const_bop (aux expr1) (aux expr2)
+    | _ -> failwith "non-constant expression as initializer for global variable"
+  in
+
+  aux expr
+
 (* in general should_ret_value = true for res (read operations), false for les (write operations ) *)
 let rec codegen_expression gamma ibuilder expr should_ret_value =
   match remove_node_annotations expr with
@@ -177,10 +209,23 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
 let codegen_topdecl global topdecl llmodule =
   match remove_node_annotations topdecl with
   | Fundecl f -> codegen_fundecl global f llmodule
-  | Vardec (typ, id) ->
-      let typ_ll = from_ast_type typ in
-      let llvalue = L.define_global id (L.const_null typ_ll) llmodule in
-      let _ = Symbol_table.add_entry id llvalue global in
+  | Vardec inits ->
+      let _ =
+        List.iter
+          (fun (typ, id, oexpr) ->
+            let typ_ll = from_ast_type typ in
+            let llvalue =
+              L.define_global id
+                (match oexpr with
+                | None -> L.const_null typ_ll
+                | Some expr -> evaluate_const_expr expr)
+                llmodule
+            in
+            let _ = Symbol_table.add_entry id llvalue global in
+            ())
+          inits
+      in
+      (* a declaration does not return *)
       fun () -> ()
 
 let to_llvm_module p =

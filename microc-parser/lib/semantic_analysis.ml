@@ -53,6 +53,25 @@ let st_add_entry_rethrow id t st code_position =
   with _ ->
     raise_semantic_error code_position ("Cannot redeclare symbol " ^ id)
 
+let check_global_assign_expr_type expr code_position =
+  let rec aux expr code_position =
+    match remove_node_annotations expr with
+    | Access _ -> false
+    | Assign _ -> false
+    | Addr _ -> false
+    | ILiteral _ -> true
+    | CLiteral _ -> true
+    | BLiteral _ -> true
+    | UnaryOp (_, expr) -> aux expr code_position
+    | BinaryOp (_, expr1, expr2) ->
+        aux expr1 code_position && aux expr2 code_position
+    | Call _ -> false
+    | Null -> true
+  in
+  if aux expr code_position then expr
+  else
+    raise_semantic_error code_position "Invalid global variable inizialization"
+
 let check_variable_type t loc =
   match t with
   | TVoid -> raise_semantic_error loc "Cannot declare a void variable"
@@ -286,9 +305,25 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
 (* return unit instead of tvoid *)
 and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
   match remove_node_annotations stmtordec with
-  | Dec (typ, id) ->
-      let t = check_variable_type (from_ast_type typ) stmtordec.loc in
-      let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
+  | Dec inits ->
+      let _ =
+        List.iter
+          (fun (typ, id, oexpr) ->
+            let t = check_variable_type (from_ast_type typ) stmtordec.loc in
+            let _ =
+              match oexpr with
+              | None -> ()
+              | Some expr ->
+                  let et = typecheck_expression gamma expr in
+                  if check_type_equality t et then ()
+                  else
+                    raise_semantic_error expr.loc
+                      ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t)
+            in
+            let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
+            ())
+          inits
+      in
       (* a declaration does not return *)
       false
       (* a Stmt returns iff the inner stmt returns *)
@@ -331,9 +366,26 @@ let typecheck_topdeclaration gamma topdecl =
           raise_semantic_error topdecl.loc
             (* currently the language itself does not accept functions that do not return  void, int, bool, char *)
             "A function can only return void, int, bool, char")
-  | Vardec (typ, id) ->
-      let t = check_variable_type (from_ast_type typ) topdecl.loc in
-      let _ = st_add_entry_rethrow id t gamma topdecl.loc in
+  | Vardec inits ->
+      let _ =
+        List.iter
+          (fun (typ, id, oexpr) ->
+            let t = check_variable_type (from_ast_type typ) topdecl.loc in
+            let _ =
+              match oexpr with
+              | None -> ()
+              | Some expr ->
+                  let expr = check_global_assign_expr_type expr topdecl.loc in
+                  let et = typecheck_expression gamma expr in
+                  if check_type_equality t et then ()
+                  else
+                    raise_semantic_error expr.loc
+                      ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t)
+            in
+            let _ = st_add_entry_rethrow id t gamma topdecl.loc in
+            ())
+          inits
+      in
       fun () -> ()
 
 let type_check p =

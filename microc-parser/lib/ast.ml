@@ -65,7 +65,8 @@ and stmt_node =
 and stmtordec = stmtordec_node annotated_node
 
 and stmtordec_node =
-  | Dec of typ * identifier (* Local variable declaration  *)
+  (* Local variabls declarations plus optional initializers *)
+  | Dec of (typ * identifier * expr option) list
   | Stmt of stmt (* A statement *)
 [@@deriving show]
 
@@ -79,7 +80,9 @@ type fun_decl = {
 
 type topdecl = topdecl_node annotated_node
 
-and topdecl_node = Fundecl of fun_decl | Vardec of typ * identifier
+and topdecl_node =
+  | Fundecl of fun_decl
+  | Vardec of (typ * identifier * expr option) list
 [@@deriving show]
 
 type program = Prog of topdecl list [@@deriving show]
@@ -105,7 +108,13 @@ and sprint_topdecl i tl =
   let tl_str =
     match tl.node with
     | Fundecl fd -> sprint_fundecl (i + 2) fd
-    | Vardec (typ, id) -> sprint_vardec (i + 2) typ id
+    | Vardec inits ->
+        let s =
+          List.fold_left
+            (fun s (typ, id, oinit) -> s |+| sprint_vardec (i + 2) typ id oinit)
+            "" inits
+        in
+        s ^ "\n"
   in
   sprint_string_indented i "topdecl\n" |+| tl_str
 
@@ -117,14 +126,19 @@ and sprint_fundecl i fn =
   |+| fn.fname |+| "\n"
   |+| sprint_string_indented (i + 2) "formals\n"
   |+| List.fold_left
-        (fun a c -> a |+| sprint_vardec (i + 4) (fst c) (snd c))
+        (fun a c -> a |+| sprint_vardec (i + 4) (fst c) (snd c) None)
         "" fn.formals
   |+| sprint_string_indented (i + 2) "body\n"
   |+| sprint_stmt (i + 4) fn.body
 
-and sprint_vardec i typ id =
-  sprint_string_indented i
-    ("vardec\n" |+| sprint_typ (i + 2) typ |+| " " |+| id |+| "\n")
+and sprint_vardec i typ id oninit =
+  let vardec_s =
+    sprint_string_indented i
+      ("vardec\n" |+| sprint_typ (i + 2) typ |+| " " |+| id |+| "\n")
+  in
+  match oninit with
+  | None -> vardec_s
+  | Some init -> vardec_s |+| (sprint_expr (i + 2) init |+| "\n")
 
 and sprint_typ i typ =
   let rec aux = function
@@ -168,7 +182,13 @@ and sprint_stmt i stmt =
 and sprint_stmtordec i stmtordec =
   let stmtordec_str =
     match stmtordec.node with
-    | Dec (typ, id) -> sprint_vardec (i + 2) typ id
+    | Dec inits ->
+        let s =
+          List.fold_left
+            (fun s (typ, id, oinit) -> s |+| sprint_vardec (i + 2) typ id oinit)
+            "" inits
+        in
+        s ^ "\n"
     | Stmt st -> sprint_stmt (i + 2) st
   in
   sprint_string_indented i "stmtordec\n" |+| stmtordec_str
