@@ -63,7 +63,10 @@ let build_uop op ll =
 
 let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
 
-let get_value_at_addr addr ibuilder =
+let build_call f params ibuilder =
+  L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
+
+let get_value_at_addr ibuilder addr =
   match L.classify_type (L.element_type (L.type_of addr)) with
   (* it's a reference, no need to load it *)
   | L.TypeKind.Array -> addr
@@ -135,22 +138,51 @@ and codegen_re gamma ibuilder e =
           build_uop uop e_ll ibuilder)
   | _ -> codegen_ae gamma ibuilder e
 
+(* in general should_ret_value = true for res (read operations), false for les (write operations ) *)
 let rec codegen_expression gamma ibuilder expr should_ret_value =
   match remove_node_annotations expr with
   | ILiteral i -> L.const_int int_ll i
   | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
   | CLiteral c -> L.const_int char_ll (int_of_char c)
   | Null -> L.const_pointer_null (L.pointer_type void_ll)
-  | Access a ->
-      codegen_access gamma ibuilder should_ret_value a should_ret_value
+  | Access acc -> codegen_access gamma ibuilder acc should_ret_value
+  | Addr acc -> codegen_access gamma ibuilder acc false
+  | UnaryOp (uop, op) ->
+      let value = codegen_expression gamma ibuilder op true in
+      build_uop uop value ibuilder
+  | BinaryOp (bop, op1, op2) ->
+      let value1 = codegen_expression gamma ibuilder op1 true in
+      let value2 = codegen_expression gamma ibuilder op2 true in
+      build_bop bop value1 value2 ibuilder
+  | Call (f, params) ->
+      let f_ll = Symbol_table.lookup f gamma in
+
+      let params_ll =
+        List.map
+          (fun param -> codegen_expression gamma ibuilder param true)
+          params
+      in
+      build_call f_ll params_ll ibuilder
   | _ -> failwith "banane"
 
-and codegen_access gamma ibuilder access should_ret_value =
-  match remove_node_annotations access with
+and codegen_access gamma ibuilder acc should_ret_value =
+  match remove_node_annotations acc with
   | AccVar id ->
       let addr = Symbol_table.lookup id gamma in
-      addr
-  | _ -> failwith "meloni"
+      if should_ret_value then get_value_at_addr ibuilder addr else addr
+  | AccIndex (base, index) ->
+      let base_ll = codegen_access gamma ibuilder base true in
+      let index_ll = codegen_expression gamma ibuilder index true in
+      let addr =
+        L.build_in_bounds_gep base_ll
+          [| Llvm.const_int int_ll 0; index_ll |]
+          (next_target_label ()) ibuilder
+      in
+      if should_ret_value then get_value_at_addr ibuilder addr else addr
+  | AccDeref expr ->
+      let ptr = codegen_expression gamma ibuilder expr true in
+      (* the value of the pointer is the address of another var *)
+      if should_ret_value then get_value_at_addr ibuilder ptr else ptr
 
 (* Declare in the current module the print prototype *)
 let print_ll llvm_module global_scope =
