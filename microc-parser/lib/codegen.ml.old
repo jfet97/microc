@@ -84,6 +84,67 @@ let add_terminal ibuilder f =
   | Some _ -> ()
   | None -> f ibuilder |> ignore
 
+(* Codegen for expr node *)
+let rec codegen_expr gamma ibuilder e =
+  match remove_node_annotations e with
+  (* an expression can be an access to a lexpr *)
+  | Access le -> (
+      let le_ll = codegen_le gamma ibuilder le in
+      match L.classify_type (L.element_type (L.type_of le_ll)) with
+      (* it's a reference, no need to load it *)
+      | Array -> le_ll
+      (* load from memory *)
+      | _ -> build_load le_ll ibuilder)
+  (* or an rexpr *)
+  | _ -> codegen_re gamma ibuilder e
+
+and codegen_ae gamma ibuilder e =
+  match remove_node_annotations e with
+  | Addr a -> codegen_le gamma ibuilder a
+  | ILiteral i -> L.const_int int_ll i
+  | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
+  | CLiteral c -> L.const_int char_ll (int_of_char c)
+  | Null -> L.undef (L.pointer_type void_ll)
+  | _ -> codegen_re gamma ibuilder e
+
+and codegen_le gamma ibuilder e =
+  match remove_node_annotations e with
+  | AccVar id ->
+      (* just return the address of id *) Symbol_table.lookup id gamma
+  | AccDeref e -> (
+      match remove_node_annotations e with
+      (* *a loads the value of a that is an address *)
+      | Access _ -> codegen_expr gamma ibuilder e
+      | _ -> codegen_ae gamma ibuilder e)
+  | AccIndex (le, e) -> (
+      (* just return the address of le[e] *)
+      let index = codegen_expr gamma ibuilder e in
+      let base = codegen_le gamma ibuilder le in
+      match L.classify_type (L.element_type (L.type_of base)) with
+      | Array ->
+          L.build_in_bounds_gep base
+            [| Llvm.const_int int_ll 0; index |]
+            (next_target_label ()) ibuilder
+      | _ -> failwith "unreachable: indexing non array is not supported")
+
+and codegen_re gamma ibuilder e =
+  match remove_node_annotations e with
+  | Assign (le, e) ->
+      let le_ll = to_null_if_llvalue_undef (codegen_le gamma ibuilder le) in
+      let e_ll = to_null_if_llvalue_undef (codegen_expr gamma ibuilder e) in
+      let _ = L.build_store e_ll le_ll ibuilder in
+      build_load le_ll ibuilder
+  | UnaryOp (uop, e) -> (
+      (* TODO: same code*)
+      match uop with
+      | Not ->
+          let e_ll = codegen_expr gamma ibuilder e in
+          build_uop uop e_ll ibuilder
+      | Neg ->
+          let e_ll = codegen_expr gamma ibuilder e in
+          build_uop uop e_ll ibuilder)
+  | _ -> codegen_ae gamma ibuilder e
+
 (* in general should_ret_value = true for res (read operations), false for les (write operations ) *)
 let rec codegen_expression gamma ibuilder expr should_ret_value =
   match remove_node_annotations expr with
@@ -145,8 +206,6 @@ let getint_ll llvm_module global_scope =
   let decl = L.declare_function "getint" getint_t llvm_module in
   Symbol_table.add_entry "getint" decl global_scope
 
-let codegen_stmt fun_def_ll fun_gamma ibuilder body = failwith "implement"
-
 let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
   let fun_ret_typ_ll = from_ast_type typ in
   let formals_typ_ll =
@@ -169,9 +228,8 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
           let _ = Symbol_table.add_entry id param_addr_ll fun_gamma in
           i + 1)
         0 formals_typ_ll
+      (* TODO: add termination block???? capire bene cosa come dove quando serve *)
     in
-    (* TODO: add termination block???? capire bene cosa come dove quando serve *)
-    let _ = codegen_stmt fun_def_ll fun_gamma ibuilder body in
     ()
 
 let codegen_topdecl global topdecl llmodule =
@@ -190,10 +248,9 @@ let to_llvm_module p =
       let llmodule = L.create_module llcontext "mc" in
       let _ = print_ll llmodule global in
       let _ = getint_ll llmodule global in
-      let deferred_bodies =
-        List.map
-          (fun topdecl -> codegen_topdecl global topdecl llmodule)
+      let _ =
+        List.iter
+          (fun topdecl -> codegen_topdecl global topdecl llmodule |> ignore)
           program
       in
-      let _ = List.iter (fun f -> f ()) deferred_bodies in
       llmodule
