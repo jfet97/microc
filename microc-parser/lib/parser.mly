@@ -17,7 +17,8 @@
 %token NULL
 %token <string> ID
 
-%token COMMA SEMICOLON
+%token COMMA
+%token SEMICOLON
 %token INT_T CHAR_T BOOL_T VOID_T
 
 %token ASSIGN
@@ -38,6 +39,9 @@
 %nonassoc THEN
 %nonassoc ELSE
 
+%nonassoc LESS_THAN_COMMA
+%left COMMA
+%nonassoc MORE_THAN_COMMA
 %right ASSIGN
 %left OR
 %left AND
@@ -265,6 +269,22 @@ expr:
     { $1 }
   | rexpr
     { $1 }
+  | comma %prec LESS_THAN_COMMA
+    { $1 |@| Location.to_code_position $loc }
+  ;
+
+ 
+comma: 
+  | expr COMMA expr
+    { Ast.Comma([$1; $3])}
+  | comma COMMA expr
+    { 
+      match $1 with
+      | Ast.Comma(exprs) -> Ast.Comma($3::exprs)
+      | _ -> assert false
+    }
+;
+
 
 (* otherwise it's unclear when take the reduction lexpr_access -> lexpr *)
 (* e.g. `STAR lexpr` becomes `STAR lexpr_access` vs wait for a possible LEFT_BRACKET, so that the reduction is post-poned *)

@@ -41,7 +41,8 @@ and expr_node =
   | UnaryOp of uop * expr (* Unary primitive operator  *)
   | BinaryOp of binop * expr * expr (* Binary primitive operator  *)
   | Call of identifier * expr list (* Function call f(...)    *)
-  | Null
+  | Comma of expr list (* Comma operator  expr1, expr2, expr3 *)
+  | Null (* NULL *)
 [@@deriving show]
 
 and access = access_node annotated_node
@@ -227,6 +228,9 @@ and sprint_expr i expr =
         |+| sprint_string_indented (i + 4) "parameters\n"
         |+| List.fold_left (fun a c -> a |+| sprint_expr (i + 6) c) "" exs
     | Null -> sprint_string_indented (i + 2) "NULL\n"
+    | Comma exs ->
+        sprint_string_indented (i + 2) "call\n"
+        |+| List.fold_left (fun a c -> a |+| sprint_expr (i + 4) c) "" exs
   in
   sprint_string_indented i "expr\n" |+| expr_str
 

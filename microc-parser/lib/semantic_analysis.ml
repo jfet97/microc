@@ -67,6 +67,7 @@ let check_global_assign_expr_type expr code_position =
         aux expr1 code_position && aux expr2 code_position
     | Call _ -> false
     | Null -> true
+    | Comma _ -> false
   in
   if aux expr code_position then expr
   else
@@ -297,6 +298,11 @@ and typecheck_expression gamma expr =
         in
         check_args fun_t args
       else raise_semantic_error expr.loc (id ^ " is not a function")
+  | Comma exprs ->
+      List.fold_left
+        (fun _ expr -> typecheck_expression gamma expr)
+        (* TVoid is just a spurious initial type because exprs is at least of length 2 *)
+        TVoid exprs
 
 and typecheck_access gamma access =
   match remove_node_annotations access with

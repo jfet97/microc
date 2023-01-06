@@ -180,6 +180,12 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
       let acc_ll = codegen_access gamma ibuilder acc false
       and expr_ll = codegen_expression gamma ibuilder expr true in
       build_store acc_ll expr_ll ibuilder
+  | Comma exprs ->
+      List.fold_left
+        (fun _ expr -> codegen_expression gamma ibuilder expr should_ret_value)
+        (* L.undef void_ll is just a spurious initial llvalue because exprs is at least of length 2 *)
+        (L.undef void_ll)
+        exprs
 
 and codegen_access gamma ibuilder acc should_ret_value =
   match remove_node_annotations acc with
