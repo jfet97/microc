@@ -96,9 +96,9 @@ let build_call f params ibuilder =
     (* f is a pointer to a function that return something *)
     L.classify_type (L.return_type (L.return_type (L.type_of f)))
   in
-  let _ =
-    Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind))
-  in
+  (* let _ =
+       Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind))
+     in *)
   match ret_typekind with
   | L.TypeKind.Void -> L.build_call f (Array.of_list params) "" ibuilder
   | _ -> L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
