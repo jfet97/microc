@@ -218,9 +218,14 @@ let codegen_topdecl global topdecl llmodule =
               L.define_global id
                 (match init_exprs with
                 | [] -> L.const_null typ_ll
-                | expr::[] -> evaluate_const_expr expr
+                | expr :: [] -> (
+                    match typ with
+                    | TypA _ ->
+                        L.const_array (L.element_type typ_ll)
+                          [| evaluate_const_expr expr |]
+                    | _ -> evaluate_const_expr expr)
                 | exprs ->
-                    L.const_array typ_ll
+                    L.const_array (L.element_type typ_ll)
                       (Array.of_list (List.map evaluate_const_expr exprs)))
                 llmodule
             in
