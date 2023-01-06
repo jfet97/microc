@@ -287,6 +287,10 @@ comma:
       | Ast.Comma(exprs) -> Ast.Comma($3::exprs)
       | _ -> assert false
     }
+  | LEFT_PAREN comma RIGHT_PAREN
+    {
+      $2
+    }
 ;
 
 
