@@ -212,13 +212,16 @@ let codegen_topdecl global topdecl llmodule =
   | Vardec inits ->
       let _ =
         List.iter
-          (fun (typ, id, oexpr) ->
+          (fun (typ, id, init_exprs) ->
             let typ_ll = from_ast_type typ in
             let llvalue =
               L.define_global id
-                (match oexpr with
-                | None -> L.const_null typ_ll
-                | Some expr -> evaluate_const_expr expr)
+                (match init_exprs with
+                | [] -> L.const_null typ_ll
+                | expr::[] -> evaluate_const_expr expr
+                | exprs ->
+                    L.const_array typ_ll
+                      (Array.of_list (List.map evaluate_const_expr exprs)))
                 llmodule
             in
             let _ = Symbol_table.add_entry id llvalue global in

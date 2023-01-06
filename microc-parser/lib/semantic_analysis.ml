@@ -106,7 +106,87 @@ let check_parameter_type t loc =
       raise_semantic_error loc "Cannot declare a pointer to array parameter"
   | _ -> t
 
-let rec typecheck_expression gamma expr =
+let rec check_dec gamma inits loc check_global_assignment_compatibility =
+  List.iter
+    (fun (typ, id, init_expr) ->
+      let t = check_variable_type (from_ast_type typ) loc in
+      let _ =
+        match init_expr with
+        | [] -> ()
+        | expr :: [] -> (
+            let expr =
+              if check_global_assignment_compatibility then
+                check_global_assign_expr_type expr loc
+              else expr
+            in
+            let et = typecheck_expression gamma expr in
+            if check_type_equality t et then ()
+            else
+              match t with
+              (* it could be an array with an initializer list of length 1 *)
+              | TArray (bt, oi) ->
+                  if check_type_equality bt et then
+                    match oi with
+                    | None ->
+                        failwith
+                          "a declaration of an array without a specified size \
+                           should be prevented in a previous step"
+                    | Some i ->
+                        if i == 1 then ()
+                        else
+                          raise_semantic_error expr.loc
+                            ("List initializer of length " ^ string_of_int 1
+                           ^ " cannot be used to initialize an array of size "
+                           ^ string_of_int i)
+                  else
+                    raise_semantic_error expr.loc
+                      ("Cannot use a " ^ show_ttype et
+                     ^ " to initialize an array of " ^ show_ttype bt)
+              | _ ->
+                  raise_semantic_error expr.loc
+                    ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t))
+        | exprs -> (
+            if not (is_type_array t) then
+              raise_semantic_error loc
+                ("Cannot use array list initializer of size > 1 to initialize \
+                  a variable of type " ^ show_ttype t)
+            else
+              match t with
+              | TArray (bt, oi) ->
+                  List.iter
+                    (fun expr ->
+                      let expr =
+                        if check_global_assignment_compatibility then
+                          check_global_assign_expr_type expr loc
+                        else expr
+                      in
+                      let et = typecheck_expression gamma expr in
+                      if check_type_equality bt et then
+                        match oi with
+                        | None ->
+                            failwith
+                              "a declaration of an array without a specified \
+                               size should be prevented in a previous step"
+                        | Some i ->
+                            if i == List.length exprs then ()
+                            else
+                              raise_semantic_error expr.loc
+                                ("List initializer of length "
+                                ^ string_of_int (List.length exprs)
+                                ^ " cannot be used to initialize an array of \
+                                   size " ^ string_of_int i)
+                      else
+                        raise_semantic_error expr.loc
+                          ("Cannot use a " ^ show_ttype et
+                         ^ " to initialize an array of " ^ show_ttype bt))
+                    exprs
+              | _ -> failwith "it was supposed to be an array!!!")
+      in
+      let _ = st_add_entry_rethrow id t gamma loc in
+      ())
+    inits
+
+and typecheck_expression gamma expr =
   match remove_node_annotations expr with
   | Access v -> typecheck_access gamma v
   | Assign (lhs, rhs) ->
@@ -306,24 +386,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
 and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
   match remove_node_annotations stmtordec with
   | Dec inits ->
-      let _ =
-        List.iter
-          (fun (typ, id, oexpr) ->
-            let t = check_variable_type (from_ast_type typ) stmtordec.loc in
-            let _ =
-              match oexpr with
-              | None -> ()
-              | Some expr ->
-                  let et = typecheck_expression gamma expr in
-                  if check_type_equality t et then ()
-                  else
-                    raise_semantic_error expr.loc
-                      ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t)
-            in
-            let _ = st_add_entry_rethrow id t gamma stmtordec.loc in
-            ())
-          inits
-      in
+      let _ = check_dec gamma inits stmtordec.loc false in
       (* a declaration does not return *)
       false
       (* a Stmt returns iff the inner stmt returns *)
@@ -367,25 +430,7 @@ let typecheck_topdeclaration gamma topdecl =
             (* currently the language itself does not accept functions that do not return  void, int, bool, char *)
             "A function can only return void, int, bool, char")
   | Vardec inits ->
-      let _ =
-        List.iter
-          (fun (typ, id, oexpr) ->
-            let t = check_variable_type (from_ast_type typ) topdecl.loc in
-            let _ =
-              match oexpr with
-              | None -> ()
-              | Some expr ->
-                  let expr = check_global_assign_expr_type expr topdecl.loc in
-                  let et = typecheck_expression gamma expr in
-                  if check_type_equality t et then ()
-                  else
-                    raise_semantic_error expr.loc
-                      ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t)
-            in
-            let _ = st_add_entry_rethrow id t gamma topdecl.loc in
-            ())
-          inits
-      in
+      let _ = check_dec gamma inits topdecl.loc true in
       fun () -> ()
 
 let type_check p =

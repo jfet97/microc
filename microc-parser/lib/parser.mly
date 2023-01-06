@@ -88,7 +88,9 @@ vardecl:
 
 assign_expr:
   | ASSIGN expr
-    { $2 }
+    { [$2] }
+  | ASSIGN LEFT_CURLY separated_list(COMMA, expr) RIGHT_CURLY
+    { $3 }
   ;
 
 vardecl_init_list:
@@ -102,16 +104,12 @@ vardecl_init_list:
       in
       List.map (fun vint -> 
         let vdesc = fst vint in
-        let oinite = snd vint in
+        let init_exprs = match snd vint with | None -> [] | Some ae -> ae in
         let tt = List.fold_left ftvd $1 (snd vdesc)
-        in (tt, fst vdesc, oinite)
+        in (tt, fst vdesc, init_exprs)
       ) $2
     }
   ;
-
-
-
-
 typ:
   | INT_T
     { Ast.TypI }
@@ -194,7 +192,7 @@ stmt:
       (* do while -> while rewriting *)
       let loc = Location.to_code_position $loc in
       let stmt_loc = Location.to_code_position($startpos($2), $endpos($2)) in
-      let expr_loc = Location.to_code_position($startpos($5), $endpos($5)) in
+      (* let expr_loc = Location.to_code_position($startpos($5), $endpos($5)) in *)
       Ast.Block([Ast.Stmt($2) |@| stmt_loc ; Ast.Stmt(Ast.While($5, $2) |@| loc) |@| loc]) |@| loc
     }
   | FOR LEFT_PAREN option(expr) SEMICOLON option(expr) SEMICOLON option(expr) RIGHT_PAREN stmt

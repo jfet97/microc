@@ -66,7 +66,7 @@ and stmtordec = stmtordec_node annotated_node
 
 and stmtordec_node =
   (* Local variabls declarations plus optional initializers *)
-  | Dec of (typ * identifier * expr option) list
+  | Dec of (typ * identifier * expr list) list
   | Stmt of stmt (* A statement *)
 [@@deriving show]
 
@@ -82,7 +82,7 @@ type topdecl = topdecl_node annotated_node
 
 and topdecl_node =
   | Fundecl of fun_decl
-  | Vardec of (typ * identifier * expr option) list
+  | Vardec of (typ * identifier * expr list) list
 [@@deriving show]
 
 type program = Prog of topdecl list [@@deriving show]
@@ -100,7 +100,7 @@ let rec sprint_program i prog =
   let prog_str =
     match prog with
     | Prog tls ->
-        List.fold_left (fun a c -> sprint_topdecl (i + 2) c |+| a) "" tls
+        List.fold_left (fun a c -> a |+| sprint_topdecl (i + 2) c) "" tls
   in
   sprint_string_indented i "program\n" |+| prog_str
 
@@ -126,19 +126,19 @@ and sprint_fundecl i fn =
   |+| fn.fname |+| "\n"
   |+| sprint_string_indented (i + 2) "formals\n"
   |+| List.fold_left
-        (fun a c -> a |+| sprint_vardec (i + 4) (fst c) (snd c) None)
+        (fun a c -> a |+| sprint_vardec (i + 4) (fst c) (snd c) [])
         "" fn.formals
   |+| sprint_string_indented (i + 2) "body\n"
   |+| sprint_stmt (i + 4) fn.body
 
-and sprint_vardec i typ id oninit =
+and sprint_vardec i typ id init_exprs =
   let vardec_s =
     sprint_string_indented i
       ("vardec\n" |+| sprint_typ (i + 2) typ |+| " " |+| id |+| "\n")
   in
-  match oninit with
-  | None -> vardec_s
-  | Some init -> vardec_s |+| (sprint_expr (i + 2) init |+| "\n")
+  List.fold_left
+    (fun s init_expr -> s |+| sprint_expr (i + 2) init_expr |+| "\n")
+    vardec_s init_exprs
 
 and sprint_typ i typ =
   let rec aux = function
