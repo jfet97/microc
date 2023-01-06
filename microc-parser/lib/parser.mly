@@ -92,7 +92,7 @@ vardecl:
   ;
 
 assign_expr:
-  | ASSIGN expr
+  | ASSIGN expr_comma
     { [$2] }
   | ASSIGN LEFT_CURLY separated_list(COMMA, expr) RIGHT_CURLY
     { $3 }
@@ -186,12 +186,12 @@ block_entry:
     }
 
 stmt:
-  | RETURN option(expr) SEMICOLON
+  | RETURN option(expr_comma) SEMICOLON
     { 
       let loc = Location.to_code_position $loc in
       Ast.Return($2) |@| loc
     }
-  | option(expr) SEMICOLON 
+  | option(expr_comma) SEMICOLON 
     { 
       let loc = Location.to_code_position $loc in
       match $1 with
@@ -200,12 +200,12 @@ stmt:
     }
   | block
     { $1 }
-  | WHILE LEFT_PAREN expr RIGHT_PAREN stmt
+  | WHILE LEFT_PAREN expr_comma RIGHT_PAREN stmt
     { 
       let loc = Location.to_code_position $loc in
       Ast.While($3, $5) |@| loc
     }
-  | DO stmt WHILE LEFT_PAREN expr RIGHT_PAREN SEMICOLON
+  | DO stmt WHILE LEFT_PAREN expr_comma RIGHT_PAREN SEMICOLON
     { 
       (* do while -> while rewriting *)
       let loc = Location.to_code_position $loc in
@@ -213,7 +213,7 @@ stmt:
       (* let expr_loc = Location.to_code_position($startpos($5), $endpos($5)) in *)
       Ast.Block([Ast.Stmt($2) |@| stmt_loc ; Ast.Stmt(Ast.While($5, $2) |@| loc) |@| loc]) |@| loc
     }
-  | FOR LEFT_PAREN option(expr) SEMICOLON option(expr) SEMICOLON option(expr) RIGHT_PAREN stmt
+  | FOR LEFT_PAREN option(expr_comma) SEMICOLON option(expr_comma) SEMICOLON option(expr_comma) RIGHT_PAREN stmt
     {
       (* for -> while rewriting *)
       let loc = Location.to_code_position $loc in
@@ -252,12 +252,12 @@ stmt:
       for_as_while
     }
     (* https://stackoverflow.com/questions/12731922/reforming-the-grammar-to-remove-shift-reduce-conflict-in-if-then-else *)
-    | IF LEFT_PAREN expr RIGHT_PAREN stmt %prec THEN
+    | IF LEFT_PAREN expr_comma RIGHT_PAREN stmt %prec THEN
     { 
       let loc = Location.to_code_position $loc in
       Ast.If($3, $5, Ast.Block([]) |@| Location.to_code_position($endpos($5), $endpos($5))) |@| loc
     }
-    | IF LEFT_PAREN expr RIGHT_PAREN stmt ELSE stmt
+    | IF LEFT_PAREN expr_comma RIGHT_PAREN stmt ELSE stmt
     { 
       let loc = Location.to_code_position $loc in
       Ast.If($3, $5, $7) |@| loc
@@ -269,15 +269,19 @@ expr:
     { $1 }
   | rexpr
     { $1 }
+  ;
+
+expr_comma:
+  | expr
+    { $1 }
   | comma %prec LESS_THAN_COMMA
     { $1 |@| Location.to_code_position $loc }
   ;
-
  
 comma: 
-  | expr COMMA expr
+  | expr_comma COMMA expr_comma
     { Ast.Comma([$1; $3])}
-  | comma COMMA expr
+  | comma COMMA expr_comma
     { 
       match $1 with
       | Ast.Comma(exprs) -> Ast.Comma($3::exprs)
@@ -316,7 +320,7 @@ lexpr:
       let loc = Location.to_code_position $loc in
       Ast.AccDeref($2) |@| loc   
     }
-  | lexpr LEFT_BRACKET expr RIGHT_BRACKET
+  | lexpr LEFT_BRACKET expr_comma RIGHT_BRACKET
     {
       let loc = Location.to_code_position $loc in
       Ast.AccIndex($1, $3) |@| loc
@@ -359,17 +363,17 @@ aexpr:
 rexpr:
   | aexpr
     { $1 }
-  | lexpr ASSIGN expr
+  | lexpr ASSIGN expr_comma
     { 
       let loc = Location.to_code_position $loc in
       Ast.Assign($1, $3) |@| loc
     }
-  | expr binop expr
+  | expr_comma binop expr_comma
     { 
       let loc = Location.to_code_position $loc in
       Ast.BinaryOp($2, $1, $3) |@| loc
     }
-  | uop expr
+  | uop expr_comma
     { 
       let loc = Location.to_code_position $loc in
       Ast.UnaryOp($1, $2) |@| loc
