@@ -64,8 +64,42 @@ let build_uop op ll =
 let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
 let build_store var value ibuilder = L.build_store value var ibuilder
 
+let debug_typekind typekind =
+  let tks =
+    [
+      (L.TypeKind.Array, (1, "Array"));
+      (L.TypeKind.BFloat, (2, "BFloat"));
+      (L.TypeKind.Double, (3, "Double"));
+      (L.TypeKind.Float, (4, "Float"));
+      (L.TypeKind.Fp128, (5, "Fp128"));
+      (L.TypeKind.Function, (6, "Function"));
+      (L.TypeKind.Half, (7, "Half"));
+      (L.TypeKind.Integer, (8, "Integer"));
+      (L.TypeKind.Label, (9, "Label"));
+      (L.TypeKind.Metadata, (10, "Metadata"));
+      (L.TypeKind.Pointer, (11, "Pointer"));
+      (L.TypeKind.Ppc_fp128, (12, "Ppc_fp128"));
+      (L.TypeKind.ScalableVector, (13, "ScalableVector"));
+      (L.TypeKind.Struct, (14, "Struct"));
+      (L.TypeKind.Token, (15, "Token"));
+      (L.TypeKind.Vector, (16, "Vector"));
+      (L.TypeKind.Void, (17, "Void"));
+      (L.TypeKind.X86_amx, (18, "X86_amx"));
+      (L.TypeKind.X86_mmx, (19, "X86_mmx"));
+      (L.TypeKind.X86fp80, (20, "X86fp80"));
+    ]
+  in
+  List.assoc typekind tks
+
 let build_call f params ibuilder =
-  L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
+  let ret_typekind =
+    (* f is a pointer to a function that return something *)
+    L.classify_type (L.return_type (L.return_type (L.type_of f)))
+  in
+  let _ = Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind)) in
+  match ret_typekind with
+  | L.TypeKind.Void -> L.build_call f (Array.of_list params) "" ibuilder
+  | _ -> L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
 
 let get_value_at_addr ibuilder addr =
   match L.classify_type (L.element_type (L.type_of addr)) with

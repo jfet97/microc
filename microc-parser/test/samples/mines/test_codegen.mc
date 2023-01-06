@@ -1,7 +1,7 @@
 int a = 1;
 
-int main() {
-  a = a + 1;
+void banana(int a) {
 
-  return 12;
 }
+
+int main() {}
