@@ -79,10 +79,10 @@ let to_null_if_llvalue_undef v =
   else v
 
 (* call f ibuilder if the current block doesn't have a terminal *)
-let add_terminal ibuilder f =
+let add_terminal ibuilder add =
   match L.block_terminator (L.insertion_block ibuilder) with
   | Some _ -> ()
-  | None -> f ibuilder |> ignore
+  | None -> add ibuilder |> ignore
 
 let evaluate_const_expr expr =
   let prelude_const_bop =
@@ -113,7 +113,6 @@ let evaluate_const_expr expr =
         List.assoc bop prelude_const_bop (aux expr1) (aux expr2)
     | _ -> failwith "non-constant expression as initializer for global variable"
   in
-
   aux expr
 
 (* in general should_ret_value = true for res (read operations), false for les (write operations ) *)
@@ -177,7 +176,27 @@ let getint_ll llvm_module global_scope =
   let decl = L.declare_function "getint" getint_t llvm_module in
   Symbol_table.add_entry "getint" decl global_scope
 
-let codegen_stmt fun_def_ll fun_gamma ibuilder body = failwith "implement"
+let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
+  match remove_node_annotations stmt with
+  | Block stmt_list ->
+      let block_gamma = Symbol_table.begin_block gamma in
+      let _ =
+        List.iter
+          (fun stmtordec ->
+            codegen_stmtordec fun_def_ll block_gamma ibuilder stmtordec
+            |> ignore)
+          stmt_list
+      in
+      ibuilder
+  | Expr expr ->
+      let _ = codegen_expression gamma ibuilder expr false in
+      ibuilder
+  | _ -> failwith "to implement"
+
+and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
+  match remove_node_annotations stmtordec with
+  | Dec _ -> failwith "to be implemented"
+  | Stmt stmt -> codegen_stmt fun_def_ll gamma ibuilder stmt
 
 let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
   let fun_ret_typ_ll = from_ast_type typ in
@@ -202,8 +221,12 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
           i + 1)
         0 formals_typ_ll
     in
-    (* TODO: add termination block???? capire bene cosa come dove quando serve *)
-    let _ = codegen_stmt fun_def_ll fun_gamma ibuilder body in
+    let _ =
+      add_terminal (codegen_stmt fun_def_ll fun_gamma ibuilder body) (fun ib ->
+          match typ with
+          | TypV -> L.build_ret_void ib
+          | t -> L.build_ret (L.undef fun_ret_typ_ll) ib)
+    in
     ()
 
 let codegen_topdecl global topdecl llmodule =
@@ -233,7 +256,6 @@ let codegen_topdecl global topdecl llmodule =
             ())
           inits
       in
-      (* a declaration does not return *)
       fun () -> ()
 
 let to_llvm_module p =

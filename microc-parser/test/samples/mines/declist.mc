@@ -6,7 +6,7 @@ int main() {
   // int a = 23, b, *c = NULL, *e = c, dd = *e, f = main(), array = {true,3,4};
 
   // int a[1] = {1, 2, 3};
-  // int a[1] = {1}; // MANCA CODE GENERATION PERCHE LISTA 1 = VARIABILE ora ma sbagliato
+  // int a[1] = {1};
 
   // okay, array non inizializzato
   int a[1] = {};
