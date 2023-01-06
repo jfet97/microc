@@ -39,9 +39,9 @@
 %nonassoc THEN
 %nonassoc ELSE
 
+(* a,b,c should be a single instance of comma instead of one with another inside it *)
 %nonassoc LESS_THAN_COMMA
 %left COMMA
-%nonassoc MORE_THAN_COMMA
 %right ASSIGN
 %left OR
 %left AND
@@ -272,7 +272,7 @@ expr:
   ;
 
 expr_comma:
-  | expr
+  | expr %prec LESS_THAN_COMMA
     { $1 }
   | comma %prec LESS_THAN_COMMA
     { $1 |@| Location.to_code_position $loc }
