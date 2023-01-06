@@ -1,0 +1,8 @@
+compilare
+
+1) clang -emit-llvm -c bin/rt-support.c 
+2) dune exec --profile release bin/microcc.exe -- test/samples/mines/test_codegen.mc
+3) llvm-link rt-support.bc a.bc -o output.bc
+4) llc -filetype=obj output.bc
+5) clang output.o -o a.out
+6) a.out

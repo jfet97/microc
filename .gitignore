@@ -1,2 +1,7 @@
 */_build
 .DS_Store
+*.bc
+*.o
+*.s
+*.out
+_mc_build

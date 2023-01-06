@@ -86,8 +86,7 @@ let () =
     let verify = ref false in
     let spec_list =
       [
-        ("-p", 
-          Arg.Unit (fun () -> action := Parse), "Parse and print AST");
+        ("-p", Arg.Unit (fun () -> action := Parse), "Parse and print AST");
         ( "-t",
           Arg.Unit (fun () -> action := Type_check),
           "Type checks and print the result" );

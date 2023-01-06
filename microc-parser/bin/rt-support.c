@@ -9,5 +9,5 @@ int getint(){
 }
 
 void print(int i) {
-  printf("%d", i);
+  printf("%d\n", i);
 }
