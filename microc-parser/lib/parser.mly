@@ -82,6 +82,7 @@ vardecl:
           | VarDescArr oi -> Ast.TypA (t, oi)
       in
       let tt = List.fold_left ftvd $1 (snd $2)
+      (* type, id *)
       in (tt, fst $2)
     }
   ;
@@ -102,10 +103,23 @@ vardecl_init_list:
           | VarDescParens -> t
           | VarDescArr oi -> Ast.TypA (t, oi)
       in
-      List.map (fun vint -> 
-        let vdesc = fst vint in
-        let init_exprs = match snd vint with | None -> [] | Some ae -> ae in
-        let tt = List.fold_left ftvd $1 (snd vdesc)
+      List.map (fun vinit -> 
+        let vdesc = fst vinit in
+        let init_exprs = match snd vinit with | None -> [] | Some ae -> ae in
+        let tt_temp = List.fold_left ftvd $1 (snd vdesc) in
+        (* set array length if there is a non-empty initializer list and the length were not already set *)
+        let tt = (
+          match tt_temp with 
+          | Ast.TypA(t, oi) -> (
+            match oi with
+              | Some _ -> tt_temp
+              | None -> 
+                let init_exprs_len = List.length init_exprs in
+                if init_exprs_len == 0 then tt_temp
+                else Ast.TypA(t, Some(init_exprs_len))
+          )
+          | _ -> tt_temp
+        )
         in (tt, fst vdesc, init_exprs)
       ) $2
     }
