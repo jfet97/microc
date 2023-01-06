@@ -11,7 +11,9 @@ int main() {
   // okay, array non inizializzato
   int a[1] = {};
 
-  int b[1] = {true};
+  // int b[1] = {true};
 
+  // 
+  int ccc[] = {1, 2, 3};
 
 }

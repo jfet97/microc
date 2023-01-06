@@ -1,10 +1,9 @@
 if ! [ -z "$2" ]
   then
-    echo "Found second argument: deleting build dir" &&
     rm -rf _mc_build 
 fi
 
-
+ rm -rf _mc_build 
 
 mkdir -p _mc_build
 
