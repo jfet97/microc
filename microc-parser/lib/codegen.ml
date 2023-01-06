@@ -96,7 +96,9 @@ let build_call f params ibuilder =
     (* f is a pointer to a function that return something *)
     L.classify_type (L.return_type (L.return_type (L.type_of f)))
   in
-  let _ = Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind)) in
+  let _ =
+    Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind))
+  in
   match ret_typekind with
   | L.TypeKind.Void -> L.build_call f (Array.of_list params) "" ibuilder
   | _ -> L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
@@ -189,7 +191,7 @@ and codegen_access gamma ibuilder acc should_ret_value =
       let index_ll = codegen_expression gamma ibuilder index true in
       let addr =
         L.build_in_bounds_gep base_ll
-          [| Llvm.const_int int_ll 0; index_ll |]
+          [| L.const_int int_ll 0; index_ll |]
           (next_target_label ()) ibuilder
       in
       if should_ret_value then get_value_at_addr ibuilder addr else addr
@@ -229,7 +231,51 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
 
 and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
   match remove_node_annotations stmtordec with
-  | Dec _ -> failwith "to be implemented"
+  | Dec inits ->
+      let _ =
+        List.iter
+          (fun (typ, id, init_exprs) ->
+            let typ_ll = from_ast_type typ in
+            let var = L.build_alloca typ_ll id ibuilder in
+            let _ =
+              match init_exprs with
+              | [] -> ( match typ with TypA _ -> () | _ -> ())
+              | expr :: [] ->
+                  let expr_ll = codegen_expression gamma ibuilder expr true in
+                  let addr =
+                    match typ with
+                    | TypA _ ->
+                        L.build_in_bounds_gep var
+                          [| L.const_int int_ll 0; Llvm.const_int int_ll 0 |]
+                          (next_target_label ()) ibuilder
+                    | _ -> var
+                  in
+                  build_store addr expr_ll ibuilder |> ignore
+              | exprs ->
+                  let exprs_ll =
+                    List.map
+                      (fun expr -> codegen_expression gamma ibuilder expr true)
+                      exprs
+                  in
+                  let _ =
+                    List.fold_left
+                      (fun i expr_ll ->
+                        let addr =
+                          L.build_in_bounds_gep var
+                            [| L.const_int int_ll 0; Llvm.const_int int_ll i |]
+                            (next_target_label ()) ibuilder
+                        in
+                        let _ = build_store addr expr_ll ibuilder in
+                        i + 1)
+                      0 exprs_ll
+                  in
+                  ()
+            in
+            let _ = Symbol_table.add_entry id var gamma in
+            ())
+          inits
+      in
+      ibuilder
   | Stmt stmt -> codegen_stmt fun_def_ll gamma ibuilder stmt
 
 let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
@@ -249,12 +295,13 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
       List.fold_left
         (fun i (typ_ll, id) ->
           let param_addr_ll = L.build_alloca typ_ll id ibuilder in
-          let param_ll = L.param fun_def_ll i in
-          let _ = build_store param_ll param_addr_ll ibuilder in
+          let i_param_ll = L.param fun_def_ll i in
+          let _ = build_store param_addr_ll i_param_ll ibuilder in
           let _ = Symbol_table.add_entry id param_addr_ll fun_gamma in
           i + 1)
         0 formals_typ_ll
     in
+    let _ = target_register_counter := 0 in
     let _ =
       add_terminal (codegen_stmt fun_def_ll fun_gamma ibuilder body) (fun ib ->
           match typ with
