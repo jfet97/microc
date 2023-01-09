@@ -3,7 +3,7 @@ if ! [ -z "$2" ]
     rm -rf _mc_build 
 fi
 
- rm -rf _mc_build 
+rm -rf _mc_build 
 
 mkdir -p _mc_build
 

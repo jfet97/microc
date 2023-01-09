@@ -62,7 +62,14 @@ let build_uop op ll =
   snd (List.find (fun o -> fst o == op) prelude_uop) ll (next_target_label ())
 
 let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
-let build_store var value ibuilder = L.build_store value var ibuilder
+
+let build_store var value ibuilder =
+  let value =
+    if L.is_undef value then
+      L.const_pointer_null (L.element_type (L.type_of var))
+    else value
+  in
+  L.build_store value var ibuilder
 
 let debug_typekind typekind =
   let tks =
@@ -94,7 +101,7 @@ let debug_typekind typekind =
 let build_call f params ibuilder =
   let ret_typekind =
     (* f is a pointer to a function that return something *)
-    L.classify_type (L.return_type (L.return_type (L.type_of f)))
+    L.classify_type (L.return_type (L.element_type (L.type_of f)))
   in
   (* let _ =
        Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind))
@@ -157,7 +164,7 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
   | ILiteral i -> L.const_int int_ll i
   | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
   | CLiteral c -> L.const_int char_ll (int_of_char c)
-  | Null -> L.const_pointer_null (L.pointer_type void_ll)
+  | Null -> L.undef void_ll
   | Access acc -> codegen_access gamma ibuilder acc should_ret_value
   | Addr acc -> codegen_access gamma ibuilder acc false
   | UnaryOp (uop, op) ->
@@ -179,7 +186,8 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
   | Assign (acc, expr) ->
       let acc_ll = codegen_access gamma ibuilder acc false
       and expr_ll = codegen_expression gamma ibuilder expr true in
-      build_store acc_ll expr_ll ibuilder
+      let _ = build_store acc_ll expr_ll ibuilder in
+      expr_ll
   | Comma exprs ->
       List.fold_left
         (fun _ expr -> codegen_expression gamma ibuilder expr should_ret_value)
@@ -244,6 +252,7 @@ and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
             let typ_ll = from_ast_type typ in
             let var = L.build_alloca typ_ll id ibuilder in
             let _ =
+              (* handle init list int a[] = {1, 2, 3} *)
               match init_exprs with
               | [] -> ( match typ with TypA _ -> () | _ -> ())
               | expr :: [] ->

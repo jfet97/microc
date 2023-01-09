@@ -269,18 +269,24 @@ expr:
     { $1 }
   | rexpr
     { $1 }
+  (*| LEFT_PAREN expr_comma RIGHT_PAREN
+    { $2 }*)
   ;
 
 expr_comma:
   | expr %prec LESS_THAN_COMMA
     { $1 }
   | comma %prec LESS_THAN_COMMA
-    { $1 |@| Location.to_code_position $loc }
+    { 
+      match $1 with
+      | Ast.Comma exprs -> Ast.Comma (List.rev exprs) |@| Location.to_code_position $loc
+      | _ -> assert false
+    }
   ;
  
 comma: 
   | expr_comma COMMA expr_comma
-    { Ast.Comma([$1; $3])}
+    { Ast.Comma([$3; $1])}
   | comma COMMA expr_comma
     { 
       match $1 with
