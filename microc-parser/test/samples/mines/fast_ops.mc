@@ -13,4 +13,21 @@ int main() {
   // a %= false;
 
   print(a);
+
+  print(a++);
+  print(a);
+
+  print(a--);
+  print(a);
+
+  print(++a);
+  print(a);
+
+  print(--a);
+  print(a);
+
+
+
+
+  
 }

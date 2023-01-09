@@ -96,6 +96,10 @@ rule next_token = parse
   { MOD_ASSIGN }
 | '='
   { ASSIGN }
+| "++"
+  { PLUSPLUS }
+| "--"
+  { MINUSMINUS }
 | "&&"
   { AND }
 | "||"

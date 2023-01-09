@@ -22,6 +22,7 @@
 %token INT_T CHAR_T BOOL_T VOID_T
 
 
+%token PLUSPLUS MINUSMINUS
 %token ASSIGN ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
 %token ADD SUB DIV MOD
 %token STAR AMPERSAND
@@ -53,6 +54,7 @@
 %left ADD SUB
 %left STAR DIV MOD 
 %nonassoc NOT AMPERSAND
+// %nonassoc PLUSPLUS MINUSMINUS
 %nonassoc LEFT_BRACKET
 
 /* Starting symbol */
@@ -405,6 +407,32 @@ rexpr:
     { 
       let loc = Location.to_code_position $loc in
       Ast.Assign($1, Ast.BinaryOp(Ast.Mod, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
+    }
+  | lexpr PLUSPLUS
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Comma([
+        Ast.Assign($1, Ast.BinaryOp(Ast.Add, Ast.Access($1) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc) |@| loc;
+        Ast.BinaryOp(Ast.Sub, Ast.Access($1) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc
+      ]) |@| loc
+    }
+  | lexpr MINUSMINUS
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Comma([
+        Ast.Assign($1, Ast.BinaryOp(Ast.Sub, Ast.Access($1) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc) |@| loc;
+        Ast.BinaryOp(Ast.Add, Ast.Access($1) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc
+      ]) |@| loc
+    }
+  | PLUSPLUS lexpr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($2, Ast.BinaryOp(Ast.Add, Ast.Access($2) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc) |@| loc
+    }
+  | MINUSMINUS lexpr
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($2, Ast.BinaryOp(Ast.Sub, Ast.Access($2) |@| loc, Ast.ILiteral(1) |@| loc) |@| loc) |@| loc
     }
   | expr_comma binop expr_comma
     { 
