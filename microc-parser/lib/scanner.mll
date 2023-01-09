@@ -84,6 +84,16 @@ rule next_token = parse
     { CHAR (Lexing.lexeme_char lexbuf 1) }
 | "'" '\\' backslash_escapes "'"
     { CHAR (char_for_backslash (Lexing.lexeme_char lexbuf 2)) }
+| "+="
+  { ADD_ASSIGN}
+| "-="
+  { SUB_ASSIGN }
+| "*="
+  { MUL_ASSIGN }
+| "/="
+  { DIV_ASSIGN }
+| "%="
+  { MOD_ASSIGN }
 | '='
   { ASSIGN }
 | "&&"

@@ -21,7 +21,8 @@
 %token SEMICOLON
 %token INT_T CHAR_T BOOL_T VOID_T
 
-%token ASSIGN
+
+%token ASSIGN ADD_ASSIGN SUB_ASSIGN MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
 %token ADD SUB DIV MOD
 %token STAR AMPERSAND
 %token AND OR NOT
@@ -42,6 +43,8 @@
 (* a,b,c should be a single instance of comma instead of one with another inside it *)
 %nonassoc LESS_THAN_COMMA
 %left COMMA
+%right MUL_ASSIGN DIV_ASSIGN MOD_ASSIGN
+%right ADD_ASSIGN SUB_ASSIGN
 %right ASSIGN
 %left OR
 %left AND
@@ -377,6 +380,31 @@ rexpr:
     { 
       let loc = Location.to_code_position $loc in
       Ast.Assign($1, $3) |@| loc
+    }
+  | lexpr ADD_ASSIGN expr_comma
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, Ast.BinaryOp(Ast.Add, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
+    }
+  | lexpr SUB_ASSIGN expr_comma
+    {
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, Ast.BinaryOp(Ast.Sub, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
+    }
+  | lexpr MUL_ASSIGN expr_comma
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, Ast.BinaryOp(Ast.Mult, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
+    }
+  | lexpr DIV_ASSIGN expr_comma
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, Ast.BinaryOp(Ast.Div, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
+    }
+  | lexpr MOD_ASSIGN expr_comma
+    { 
+      let loc = Location.to_code_position $loc in
+      Ast.Assign($1, Ast.BinaryOp(Ast.Mod, Ast.Access($1) |@| loc, $3) |@| loc) |@| loc
     }
   | expr_comma binop expr_comma
     { 
