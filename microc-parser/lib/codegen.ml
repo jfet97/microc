@@ -6,13 +6,13 @@ let remove_node_annotations annotated_node =
   match annotated_node with { loc; node } -> node
 
 (* The LLVM global context *)
-let llcontext = L.global_context ()
+let mc_context = L.global_context ()
 
 (* Some useful LLVM IR type to use in the code generation *)
-let int_ll = L.i32_type llcontext
-let bool_ll = L.i1_type llcontext
-let char_ll = L.i8_type llcontext
-let void_ll = L.void_type llcontext
+let int_ll = L.i32_type mc_context
+let bool_ll = L.i1_type mc_context
+let char_ll = L.i8_type mc_context
+let void_ll = L.void_type mc_context
 
 (* Translate into a LLVM IR one*)
 let rec from_ast_type = function
@@ -121,7 +121,7 @@ let to_null_if_llvalue_undef v =
   if L.is_undef v then L.const_pointer_null (L.pointer_type (L.type_of v))
   else v
 
-(* call f ibuilder if the current block doesn't have a terminal *)
+(* call 'add ibuilder' if the current block doesn't have a terminal *)
 let add_terminal ibuilder add =
   match L.block_terminator (L.insertion_block ibuilder) with
   | Some _ -> ()
@@ -158,7 +158,7 @@ let evaluate_const_expr expr =
   in
   aux expr
 
-(* in general should_ret_value = true for res (read operations), false for les (write operations ) *)
+(* in general should_ret_value = true for rhs (read operations), false for lhs (write operations) *)
 let rec codegen_expression gamma ibuilder expr should_ret_value =
   match remove_node_annotations expr with
   | ILiteral i -> L.const_int int_ll i
@@ -166,6 +166,7 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
   | CLiteral c -> L.const_int char_ll (int_of_char c)
   | Null -> L.undef void_ll
   | Access acc -> codegen_access gamma ibuilder acc should_ret_value
+  (* &a -> i want a address *)
   | Addr acc -> codegen_access gamma ibuilder acc false
   | UnaryOp (uop, op) ->
       let value = codegen_expression gamma ibuilder op true in
@@ -184,6 +185,7 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
       in
       build_call f_ll params_ll ibuilder
   | Assign (acc, expr) ->
+      (* i want the address of the access, the value of the expression *)
       let acc_ll = codegen_access gamma ibuilder acc false
       and expr_ll = codegen_expression gamma ibuilder expr true in
       let _ = build_store acc_ll expr_ll ibuilder in
@@ -214,18 +216,6 @@ and codegen_access gamma ibuilder acc should_ret_value =
       (* the value of the pointer is the address of another var *)
       if should_ret_value then get_value_at_addr ibuilder ptr else ptr
 
-(* Declare in the current module the print prototype *)
-let print_ll llvm_module global_scope =
-  let print_t = L.function_type void_ll [| int_ll |] in
-  let decl = L.declare_function "print" print_t llvm_module in
-  Symbol_table.add_entry "print" decl global_scope
-
-(* Declare in the current module the getint prototype *)
-let getint_ll llvm_module global_scope =
-  let getint_t = L.function_type int_ll [||] in
-  let decl = L.declare_function "getint" getint_t llvm_module in
-  Symbol_table.add_entry "getint" decl global_scope
-
 let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
   match remove_node_annotations stmt with
   | Block stmt_list ->
@@ -240,6 +230,49 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       ibuilder
   | Expr expr ->
       let _ = codegen_expression gamma ibuilder expr false in
+      ibuilder
+  | Return oexpr ->
+      let _ =
+        match oexpr with
+        | None -> L.build_ret_void ibuilder
+        | Some expr ->
+            L.build_ret (codegen_expression gamma ibuilder expr true) ibuilder
+      in
+      ibuilder
+  | If (cond, then_stmt, else_stmt) ->
+      let cond_ll = codegen_expression gamma ibuilder cond true in
+      (* create empty blocks *)
+      let then_block =
+        L.append_block mc_context ("then" ^ next_target_label ()) fun_def_ll
+      in
+      let else_block =
+        L.append_block mc_context ("else" ^ next_target_label ()) fun_def_ll
+      in
+      let merge_block =
+        L.append_block mc_context ("merge" ^ next_target_label ()) fun_def_ll
+      in
+      let _ =
+        (* generate code for the then statement, then insert it into the then block *)
+        (* add br to the merge block if the then block does not return *)
+        add_terminal
+          (codegen_stmt fun_def_ll gamma
+             (L.builder_at_end mc_context then_block)
+             then_stmt)
+          (L.build_br merge_block)
+      in
+      (* generate code for the else statement, else insert it into the else block *)
+      (* add br to the merge block if the else block does not return *)
+      let _ =
+        add_terminal
+          (codegen_stmt fun_def_ll gamma
+             (L.builder_at_end mc_context else_block)
+             else_stmt)
+          (L.build_br merge_block)
+      in
+      (* build the conditional *)
+      let _ = L.build_cond_br cond_ll then_block else_block ibuilder in
+      (* insert at the end the merge block *)
+      let _ = L.position_at_end merge_block ibuilder in
       ibuilder
   | _ -> failwith "to implement"
 
@@ -304,7 +337,7 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
   let fun_def_ll = L.define_function fname fun_typ_ll llmodule in
   let _ = Symbol_table.add_entry fname fun_def_ll gamma in
   fun () ->
-    let ibuilder = L.builder_at_end llcontext (L.entry_block fun_def_ll) in
+    let ibuilder = L.builder_at_end mc_context (L.entry_block fun_def_ll) in
     let fun_gamma = Symbol_table.begin_block gamma in
     let _ =
       List.fold_left
@@ -317,13 +350,10 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
         0 formals_typ_ll
     in
     let _ = target_register_counter := 0 in
-    let _ =
-      add_terminal (codegen_stmt fun_def_ll fun_gamma ibuilder body) (fun ib ->
-          match typ with
-          | TypV -> L.build_ret_void ib
-          | t -> L.build_ret (L.undef fun_ret_typ_ll) ib)
-    in
-    ()
+    add_terminal (codegen_stmt fun_def_ll fun_gamma ibuilder body) (fun ib ->
+        match typ with
+        | TypV -> L.build_ret_void ib
+        | t -> L.build_ret (L.undef fun_ret_typ_ll) ib)
 
 let codegen_topdecl global topdecl llmodule =
   match remove_node_annotations topdecl with
@@ -354,11 +384,26 @@ let codegen_topdecl global topdecl llmodule =
       in
       fun () -> ()
 
+(* Declare a function prototype in the current module *)
+let declare_function llvm_module global_scope fun_t name =
+  let fun_decl = L.declare_function name fun_t llvm_module in
+  Symbol_table.add_entry name fun_decl global_scope
+
+(* Declare in the current module the print prototype *)
+let print_ll llvm_module global_scope =
+  let print_t = L.function_type void_ll [| int_ll |] in
+  declare_function llvm_module global_scope print_t "print"
+
+(* Declare in the current module the getint prototype *)
+let getint_ll llvm_module global_scope =
+  let getint_t = L.function_type int_ll [||] in
+  declare_function llvm_module global_scope getint_t "getint"
+
 let to_llvm_module p =
   match p with
   | Prog program ->
       let global = Symbol_table.begin_block Symbol_table.empty_table in
-      let llmodule = L.create_module llcontext "mc" in
+      let llmodule = L.create_module mc_context "mc" in
       let _ = print_ll llmodule global in
       let _ = getint_ll llmodule global in
       let deferred_bodies =

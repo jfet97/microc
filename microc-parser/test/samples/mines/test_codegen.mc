@@ -2,7 +2,46 @@ int a = 1;
 
 int b[3] = {9, 4, 3};
 
-void banana(int parametro) {}
+void explicit_ret_void(int parametro) {
+  return;
+}
+
+void no_explicit_ret_void(int parametro) {
+}
+
+int explicit_ret_int() {
+  return 123;
+}
+
+void test_if() {
+  if(a > 34) {
+    int b = 1 + 2;
+
+  } else {
+    int b = 4 + 5;
+    return;
+  }
+
+  int e = 46;
+  // return;
+
+  if(a < 7) return;
+
+  if(a > 10) {
+    if(a > 20) {
+      print(1);
+      return;
+    } else {
+      print(2);
+    }
+
+    // deadcode
+    // print(45);
+  }
+
+  print(45);
+
+}
 
 void main() {
   print(b[0]);
@@ -45,4 +84,6 @@ void main() {
 
   int from_stdin = getint();
   print(from_stdin);
+
+  print(explicit_ret_int());
 }
