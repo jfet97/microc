@@ -271,7 +271,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       in
       (* build the conditional *)
       let _ = L.build_cond_br cond_ll then_block else_block ibuilder in
-      (* insert at the end the merge block *)
+      (* move the builder at the end of the merge block *)
       let _ = L.position_at_end merge_block ibuilder in
       ibuilder
   | While (cond, stmt) ->
