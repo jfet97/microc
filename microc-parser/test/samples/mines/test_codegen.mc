@@ -43,7 +43,7 @@ void test_if() {
 
 }
 
-void main() {
+int main() {
   print(b[0]);
   print(b[1]);
   print(b[2]);
@@ -86,4 +86,19 @@ void main() {
   print(from_stdin);
 
   print(explicit_ret_int());
+
+  test_while();
+
+  return 1;
+}
+
+
+int test_while() {
+  int cond = 10;
+
+  while(--cond >= 0) {
+    print(cond);
+  }
+
+  return cond;
 }

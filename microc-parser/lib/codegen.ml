@@ -241,7 +241,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       ibuilder
   | If (cond, then_stmt, else_stmt) ->
       let cond_ll = codegen_expression gamma ibuilder cond true in
-      (* create empty blocks *)
+      (* create empty blocks for then, else and the last merge *)
       let then_block =
         L.append_block mc_context ("then" ^ next_target_label ()) fun_def_ll
       in
@@ -274,7 +274,40 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       (* insert at the end the merge block *)
       let _ = L.position_at_end merge_block ibuilder in
       ibuilder
-  | _ -> failwith "to implement"
+  | While (cond, stmt) ->
+      let condition_block =
+        L.append_block mc_context ("cond" ^ next_target_label ()) fun_def_ll
+      in
+      let body_block =
+        L.append_block mc_context ("body" ^ next_target_label ()) fun_def_ll
+      in
+      let merge_block =
+        L.append_block mc_context ("merge" ^ next_target_label ()) fun_def_ll
+      in
+
+      (* jump to the condition *)
+      let _ = L.build_br condition_block ibuilder in
+
+      (* generate code for the body statement, else insert it into the body block *)
+      (* add br to the condition block if the body block does not return *)
+      let _ =
+        add_terminal
+          (codegen_stmt fun_def_ll gamma
+             (L.builder_at_end mc_context body_block)
+             stmt)
+          (L.build_br condition_block)
+      in
+
+      (* build the expression and the condition inside the condition block *)
+      let merge_block_builder = L.builder_at_end mc_context condition_block in
+      let cond_ll = codegen_expression gamma merge_block_builder cond true in
+      let _ =
+        L.build_cond_br cond_ll body_block merge_block merge_block_builder
+      in
+
+      (* move the ibuilder at the end of the while *)
+      let _ = L.position_at_end merge_block ibuilder in
+      ibuilder
 
 and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
   match remove_node_annotations stmtordec with
