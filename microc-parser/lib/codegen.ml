@@ -214,7 +214,6 @@ and codegen_access gamma ibuilder acc should_ret_value =
       let addr = Symbol_table.lookup id gamma in
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccIndex (base, index) ->
-      (* true/false same thing because array are specially handled *)
       let base_ll = codegen_access gamma ibuilder base true in
       let index_ll = codegen_expression gamma ibuilder index true in
       (* base_ll could be a pointer to an array or just a pointer *)
