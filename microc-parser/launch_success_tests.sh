@@ -1,9 +1,12 @@
 #! /bin/bash
 
-cd test/samples/success
+# do dune exec --profile release ./test/codegen_test.exe -- $FILE
 
-for FILE in *; 
-do dune exec --profile release ../../codegen_test.exe -- $FILE
-echo this was $FILE
+for FILE in test/samples/success/*;
+do echo -----------------------------------------------------------
+echo $FILE:
+source "compile.sh" $FILE
 read -n 1 -s
+echo -----------------------------------------------------------
+echo
 done

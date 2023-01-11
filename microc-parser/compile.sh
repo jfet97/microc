@@ -1,9 +1,6 @@
-if ! [ -z "$2" ]
-  then
-    rm -rf _mc_build 
-fi
+rm -rf _mc_build
 
-rm -rf _mc_build 
+CURR_DIR=$PWD
 
 mkdir -p _mc_build
 
@@ -19,4 +16,6 @@ llc -filetype=obj output.bc &&
 
 clang output.o -o a.out &&
 
-./a.out
+timeout 15s ./a.out
+
+cd $CURR_DIR
