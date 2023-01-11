@@ -180,14 +180,25 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
 
       let params_ll =
         List.map
-          (fun param -> codegen_expression gamma ibuilder param true)
+          (fun param_ll ->
+            let param = codegen_expression gamma ibuilder param_ll true in
+            if
+              L.classify_type (L.element_type (L.type_of param))
+              == L.TypeKind.Array
+            then
+              L.build_bitcast param
+                (* param is a pointer to an array, cast it into a pointer to the data STORED into the array *)
+                (L.pointer_type
+                   (L.element_type (L.element_type (L.type_of param))))
+                (next_target_label ()) ibuilder
+            else param)
           params
       in
       build_call f_ll params_ll ibuilder
   | Assign (acc, expr) ->
       (* i want the address of the access, the value of the expression *)
-      let acc_ll = codegen_access gamma ibuilder acc false
-      and expr_ll = codegen_expression gamma ibuilder expr true in
+      let acc_ll = codegen_access gamma ibuilder acc false in
+      let expr_ll = codegen_expression gamma ibuilder expr true in
       let _ = build_store acc_ll expr_ll ibuilder in
       expr_ll
   | Comma exprs ->
@@ -203,12 +214,21 @@ and codegen_access gamma ibuilder acc should_ret_value =
       let addr = Symbol_table.lookup id gamma in
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccIndex (base, index) ->
+      (* true/false same thing because array are specially handled *)
       let base_ll = codegen_access gamma ibuilder base true in
       let index_ll = codegen_expression gamma ibuilder index true in
+      (* base_ll could be a pointer to an array or just a pointer *)
+      let base_ll_t = L.element_type (L.type_of base_ll) in
       let addr =
-        L.build_in_bounds_gep base_ll
-          [| L.const_int int_ll 0; index_ll |]
-          (next_target_label ()) ibuilder
+        match L.classify_type base_ll_t with
+        | L.TypeKind.Array ->
+            L.build_in_bounds_gep base_ll
+              [| L.const_int int_ll 0; index_ll |]
+              (next_target_label ()) ibuilder
+        | _ ->
+            (* if a parameter was declared as an array, it has just decayed into a pointer *)
+            L.build_in_bounds_gep base_ll [| index_ll |] (next_target_label ())
+              ibuilder
       in
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccDeref expr ->
@@ -362,7 +382,12 @@ and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
 let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
   let fun_ret_typ_ll = from_ast_type typ in
   let formals_typ_ll =
-    List.map (fun (typ, id) -> (from_ast_type typ, id)) formals
+    List.map
+      (fun (typ, id) ->
+        match typ with
+        | TypA (el_typ, _) -> (from_ast_type (TypP el_typ), id)
+        | _ -> (from_ast_type typ, id))
+      formals
   in
   let fun_typ_ll =
     L.function_type fun_ret_typ_ll (Array.of_list (List.map fst formals_typ_ll))

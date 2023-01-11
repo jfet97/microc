@@ -21,5 +21,6 @@ int main()
   printb(!false);
   printb(!true);
   print(-10);
-  print(--42);
+  // print(--42); // <-- invalid use of pre-decrement operator
+  print(- -42);
 }
