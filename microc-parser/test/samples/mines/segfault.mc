@@ -12,7 +12,8 @@ int main(){
     set_element(i, b, i);
   }
 
-  b[5]++;
+  print(b[5]++);
+  print(++b[5]);
 
   for(i =0; i < 10; i++) {
     print(b[i]);

@@ -214,9 +214,10 @@ and codegen_access gamma ibuilder acc should_ret_value =
       let addr = Symbol_table.lookup id gamma in
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccIndex (base, index) ->
+      (* true/false does not matter if base is an array because them are specially handled, it matters if base would be a pointer from a decayed array parameter and should be true because we want the pointer to the elements of the array, not the addres of the decayed pointer *)
       let base_ll = codegen_access gamma ibuilder base true in
       let index_ll = codegen_expression gamma ibuilder index true in
-      (* base_ll could be a pointer to an array or just a pointer *)
+      (* base_ll could be a pointer to an array or just a pointer from a decayed array parameter *)
       let base_ll_t = L.element_type (L.type_of base_ll) in
       let addr =
         match L.classify_type base_ll_t with
