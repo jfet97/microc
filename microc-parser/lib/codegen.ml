@@ -365,7 +365,7 @@ and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
                         build_in_bounds_gep var
                           [| L.const_int int_ll 0; Llvm.const_int int_ll 0 |]
                           ibuilder
-                    (* int a = {1} is just fine *)
+                    (* it could be 'T a = T_val' or 'T a = {T_val}' *)
                     | _ -> var
                   in
                   build_store addr expr_ll ibuilder |> ignore
@@ -464,7 +464,7 @@ let codegen_topdecl global topdecl llmodule =
                     | TypA _ ->
                         L.const_array (L.element_type typ_ll)
                           [| evaluate_const_expr expr |]
-                    (* int a = {1} is just fine *)
+                    (* it could be 'T a = T_val' or 'T a = {T_val}' *)
                     | _ ->
                         evaluate_const_expr expr
                         (* an init list with more than one element *))

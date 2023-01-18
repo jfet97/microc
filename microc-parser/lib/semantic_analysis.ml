@@ -1,9 +1,8 @@
 exception Semantic_error of Location.code_pos * string
 
-let raise_semantic_error code_position msg =
-  raise (Semantic_error (code_position, msg))
-
 open Ast
+
+(* --------------- types --------------------- *)
 
 (* these are the actual types of our entities, functions included, the ones from ast were just annotations *)
 type ttype =
@@ -27,6 +26,7 @@ let rec from_ast_type t =
   | Ast.TypP tt -> TPtr (from_ast_type tt)
   | Ast.TypA (bt, oi) -> TArray (from_ast_type bt, oi)
 
+(* "equality", maybe just assignability *)
 let rec check_type_equality t1 t2 =
   match (t1, t2) with
   | TFun (tp1, tr1), TFun (tp2, tr2) ->
@@ -41,8 +41,15 @@ let rec check_type_equality t1 t2 =
 let is_type_array t = match t with TArray (_, _) -> true | _ -> false
 let is_type_fun t = match t with TFun (_, _) -> true | _ -> false
 
+(* --------------- generic utils --------------------- *)
+
+let raise_semantic_error code_position msg =
+  raise (Semantic_error (code_position, msg))
+
 let remove_node_annotations annotated_node =
   match annotated_node with { loc; node } -> node
+
+(* --------------- symbol table utils --------------------- *)
 
 let st_lookup_rethrow id gamma code_position msg =
   try Symbol_table.lookup id gamma
@@ -53,6 +60,9 @@ let st_add_entry_rethrow id t st code_position =
   with _ ->
     raise_semantic_error code_position ("Cannot redeclare symbol " ^ id)
 
+(* --------------- type checking --------------------- *)
+
+(* allow just constant initializers and constant expressions for global*)
 let check_global_assign_expr_type expr code_position =
   let rec aux expr code_position =
     match remove_node_annotations expr with
@@ -107,53 +117,68 @@ let check_parameter_type t loc =
       raise_semantic_error loc "Cannot declare a pointer to array parameter"
   | _ -> t
 
-let rec check_dec gamma inits loc check_global_assignment_compatibility =
+let rec check_declaration gamma inits loc check_global_assignment_compatibility
+    =
   List.iter
     (fun (typ, id, init_expr) ->
-      let t = check_variable_type (from_ast_type typ) loc in
+      let var_typ = check_variable_type (from_ast_type typ) loc in
       let _ =
         match init_expr with
+        (* empty init list *)
         | [] -> ()
+        (* init list with a single element *)
         | expr :: [] -> (
             let expr =
+              (* is it a global declaration? check the constness of stuff *)
               if check_global_assignment_compatibility then
                 check_global_assign_expr_type expr loc
               else expr
             in
-            let et = typecheck_expression gamma expr in
-            if check_type_equality t et then ()
+            let expr_typ = typecheck_expression gamma expr in
+
+            (* if true we had 'T a = T_val' or 'T a = {T_val}' *)
+            (* if false we had 'T a[size] = {T_val}' or a type error e.g. 'int a = true'*)
+            if check_type_equality var_typ expr_typ then ()
             else
-              match t with
-              (* it could be an array with an initializer list of length 1 *)
-              | TArray (bt, oi) ->
-                  if check_type_equality bt et then
-                    match oi with
+              match var_typ with
+              (* so, it could have been an array declaration with an initializer list of length 1 *)
+              | TArray (base_typ, osize) ->
+                  if check_type_equality base_typ expr_typ then
+                    match osize with
                     | None ->
                         failwith
                           "a declaration of an array without a specified size \
-                           should be prevented in a previous step"
-                    | Some i ->
-                        if i == 1 then ()
+                           should be prevented in a previous step \
+                           (check_variable_type)"
+                    | Some size ->
+                        (* we had 'T a[1] = {T_val}' *)
+                        if size == 1 then ()
                         else
+                          (* we had 'T a[n] = {T_val}' with n>1*)
                           raise_semantic_error expr.loc
                             ("List initializer of length " ^ string_of_int 1
                            ^ " cannot be used to initialize an array of size "
-                           ^ string_of_int i)
+                           ^ string_of_int size)
                   else
+                    (* e.g. 'int a[1] = { bool }' *)
                     raise_semantic_error expr.loc
-                      ("Cannot use a " ^ show_ttype et
-                     ^ " to initialize an array of " ^ show_ttype bt)
+                      ("Cannot use a " ^ show_ttype expr_typ
+                     ^ " to initialize an array of " ^ show_ttype base_typ)
+              (* or a type error e.g. 'int a = true' *)
               | _ ->
                   raise_semantic_error expr.loc
-                    ("Cannot assign " ^ show_ttype et ^ " to " ^ show_ttype t))
+                    ("Cannot assign " ^ show_ttype expr_typ ^ " to "
+                   ^ show_ttype var_typ))
+        (* init list with more than one element *)
         | exprs -> (
-            if not (is_type_array t) then
+            if not (is_type_array var_typ) then
+              (* 'T a = {T_val}' is just fine, 'T a = {T_val_1, T_val_2, ...}' is not *)
               raise_semantic_error loc
                 ("Cannot use array list initializer of size > 1 to initialize \
-                  a variable of type " ^ show_ttype t)
+                  a variable of type " ^ show_ttype var_typ)
             else
-              match t with
-              | TArray (bt, oi) ->
+              match var_typ with
+              | TArray (base_typ, o_size) ->
                   List.iter
                     (fun expr ->
                       let expr =
@@ -162,28 +187,32 @@ let rec check_dec gamma inits loc check_global_assignment_compatibility =
                         else expr
                       in
                       let et = typecheck_expression gamma expr in
-                      if check_type_equality bt et then
-                        match oi with
+                      if check_type_equality base_typ et then
+                        match o_size with
                         | None ->
                             failwith
                               "a declaration of an array without a specified \
-                               size should be prevented in a previous step"
-                        | Some i ->
-                            if i == List.length exprs then ()
+                               size should be prevented in a previous step \
+                               (check_variable_type)"
+                        | Some size ->
+                            (* we had 'T a[n] = {T_val_1, ..., T_val_n}' *)
+                            if size == List.length exprs then ()
                             else
+                              (* we had 'T a[n] = {T_val_1, ..., T_val_m}' with n != m*)
                               raise_semantic_error expr.loc
                                 ("List initializer of length "
                                 ^ string_of_int (List.length exprs)
                                 ^ " cannot be used to initialize an array of \
-                                   size " ^ string_of_int i)
+                                   size " ^ string_of_int size)
                       else
+                        (* e.g. 'int a[2] = { bool, 4 }' *)
                         raise_semantic_error expr.loc
                           ("Cannot use a " ^ show_ttype et
-                         ^ " to initialize an array of " ^ show_ttype bt))
+                         ^ " to initialize an array of " ^ show_ttype base_typ))
                     exprs
-              | _ -> failwith "it was supposed to be an array!!!")
+              | _ -> failwith "it was supposed to be an array, check the AST")
       in
-      let _ = st_add_entry_rethrow id t gamma loc in
+      let _ = st_add_entry_rethrow id var_typ gamma loc in
       ())
     inits
 
@@ -264,39 +293,49 @@ and typecheck_expression gamma expr =
                 ("The binary " ^ Ast.show_binop op
                ^ " operator's arguments must have the same type")))
   | Call (id, args) ->
-      (* let _ = Symbol_table.print_keys gamma in *)
-      let fun_t = st_lookup_rethrow id gamma expr.loc "Function not in scope" in
-      if is_type_fun fun_t then
-        let rec check_args ft args =
-          match (ft, args) with
-          (* function with no arguments, no arguments *)
-          | TFun (param_t, ret_t), [] ->
-              if check_type_equality param_t TVoid then ret_t
+      let fun_typ =
+        (* fun_typ is curried *)
+        (* e.g. (int, bool) -> int becomes int -> bool -> int *)
+        (* () -> int becomes void -> int *)
+        st_lookup_rethrow id gamma expr.loc "Function not in scope"
+      in
+      if is_type_fun fun_typ then
+        let rec check_args fun_typ args =
+          match (fun_typ, args) with
+          (* ----- handle functions declared without parameters ----- *)
+          (* no arguments and the function takes no arguments: OK *)
+          | TFun (TVoid, ret_typ), [] -> ret_typ
+          (* at least one argument but the function takes no arguments: KO *)
+          | TFun (TVoid, _), _ ->
+              raise_semantic_error expr.loc
+                ("Function" ^ id ^ "takes no arguments")
+          (* ----- handle of functions declared with parameters ----- *)
+          (* no arguments left but the function takes at least another argument: KO *)
+          | TFun _, [] ->
+              raise_semantic_error expr.loc
+                ("Too few arguments for function " ^ id)
+          (* at least one argument left and the function takes at least one more argument: check types and recur *)
+          | TFun (param_typ, ret_typ), arg :: args ->
+              let arg_typ = typecheck_expression gamma arg in
+              if check_type_equality param_typ arg_typ then
+                match (ret_typ, args) with
+                (* the function takes other parameters: recur with the remaining args *)
+                | TFun _, _ -> check_args ret_typ args
+                (* the function doesn't take other parameters and there are not left arguments: OK *)
+                | _, [] -> ret_typ
+                (* the function doesn't take other parameters but there are still left arguments: KO *)
+                | _ ->
+                    raise_semantic_error expr.loc
+                      ("Too many arguments for function" ^ id)
               else
                 raise_semantic_error expr.loc
-                  ("Too few arguments for function " ^ id)
-          (* function with one argument, an argument *)
-          | TFun (param_t, ret_t), arg :: [] ->
-              if check_type_equality param_t (typecheck_expression gamma arg)
-              then
-                (* a function is returned but we've ended the arguments *)
-                if is_type_fun ret_t then
-                  raise_semantic_error expr.loc ("Too few arguments for " ^ id)
-                else ret_t
-              else
-                raise_semantic_error expr.loc
-                  ("Wrong argument type when calling " ^ id)
-          (* function with one argument, more arguments left *)
-          | TFun (param_t, ret_t), arg :: xs ->
-              if check_type_equality param_t (typecheck_expression gamma arg)
-              then check_args ret_t xs
-              else
-                raise_semantic_error expr.loc
-                  ("Wrong argument type when calling " ^ id)
-          (* some arguments left but ft is no more a function, so it was a previous end-result *)
-          | _ -> raise_semantic_error expr.loc ("Too many arguments for" ^ id)
+                  ("Wrong argument type when calling " ^ id ^ ": expected a "
+                 ^ show_ttype param_typ ^ " but a " ^ show_ttype arg_typ
+                 ^ " was found")
+          | _ ->
+              failwith "wrong type check of arguments when calling a function"
         in
-        check_args fun_t args
+        check_args fun_typ args
       else raise_semantic_error expr.loc (id ^ " is not a function")
   | Comma exprs ->
       List.fold_left
@@ -325,7 +364,7 @@ and typecheck_access gamma access =
           else raise_semantic_error access.loc "Index is not an int"
       | _ -> raise_semantic_error access.loc "Indexing a non-array")
 
-(* return unit instead of tvoid *)
+(* the returned bool is an approximation: if true the statement returns, if false it may return or not *)
 let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
   match remove_node_annotations stmt with
   | If (guard, then_stmt, else_stmt) ->
@@ -355,7 +394,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
       match oexpr with
       | Some expr ->
           let expr_t = typecheck_expression gamma expr in
-          (* a return expression obviously returns *)
+          (* a return expression obviously returns, check if it returns something of the appropriate type *)
           if check_type_equality expr_t expected_ret_type then true
           else
             raise_semantic_error expr.loc
@@ -392,7 +431,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
 and typecheck_statement_or_declaration gamma stmtordec expected_ret_type =
   match remove_node_annotations stmtordec with
   | Dec inits ->
-      let _ = check_dec gamma inits stmtordec.loc false in
+      let _ = check_declaration gamma inits stmtordec.loc false in
       (* a declaration does not return *)
       false
       (* a Stmt returns iff the inner stmt returns *)
@@ -418,6 +457,8 @@ let typecheck_topdeclaration gamma topdecl =
               formals_t
           in
           (* add the function into the global scope *)
+          (* (int, bool) -> int becomes int -> bool -> int *)
+          (* () -> int becomes void -> int *)
           let fun_t =
             List.fold_right
               (fun (param_t, _) acc -> TFun (param_t, acc))
@@ -436,7 +477,7 @@ let typecheck_topdeclaration gamma topdecl =
             (* currently the language itself does not accept functions that do not return  void, int, bool, char *)
             "A function can only return void, int, bool, char")
   | Vardec inits ->
-      let _ = check_dec gamma inits topdecl.loc true in
+      let _ = check_declaration gamma inits topdecl.loc true in
       fun () -> ()
 
 let type_check p =
