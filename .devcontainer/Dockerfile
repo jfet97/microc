@@ -13,3 +13,4 @@ RUN opam install ppx_deriving -y
 RUN opam install dune -y
 RUN opam install utop -y
 RUN apt install clang -y
+RUN opam install odoc -y
