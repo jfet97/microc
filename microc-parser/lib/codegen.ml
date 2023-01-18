@@ -2,19 +2,17 @@ open Ast
 open Symbol_table
 module L = Llvm
 
-let remove_node_annotations annotated_node =
-  match annotated_node with { loc; node } -> node
-
 (* The LLVM global context *)
 let mc_context = L.global_context ()
 
-(* Some useful LLVM IR type to use in the code generation *)
+(* --------------- types --------------------- *)
+
+(* LLVM versions of microc types *)
 let int_ll = L.i32_type mc_context
 let bool_ll = L.i1_type mc_context
 let char_ll = L.i8_type mc_context
 let void_ll = L.void_type mc_context
 
-(* Translate into a LLVM IR one*)
 let rec from_ast_type = function
   | TypI -> int_ll
   | TypB -> bool_ll
@@ -27,14 +25,19 @@ let rec from_ast_type = function
       L.pointer_type tp
   | TypV -> void_ll
 
-(* A table mapping a binary operator in the LLVM function that implemets it and its name *)
+(* --------------- generic utils --------------------- *)
+let remove_node_annotation annotated_node =
+  match annotated_node with { loc; node } -> node
 
-let target_register_counter = ref 0
+let global_counter = ref 0
 
-let next_target_label () =
-  target_register_counter := !target_register_counter + 1;
-  "r" ^ string_of_int !target_register_counter
+let next_global_counter_value () =
+  global_counter := !global_counter + 1;
+  string_of_int !global_counter
 
+let reset_global_counter_value () = global_counter := 0
+
+(* --------------- LLVM instructions builders --------------------- *)
 let build_bop op ll1 ll2 =
   let prelude_bop =
     [
@@ -55,13 +58,21 @@ let build_bop op ll1 ll2 =
   in
   snd
     (List.find (fun o -> fst o == op) prelude_bop)
-    ll1 ll2 (next_target_label ())
+    ll1 ll2
+    ("r" ^ next_global_counter_value ())
 
 let build_uop op ll =
   let prelude_uop = [ (Neg, L.build_neg); (Not, L.build_not) ] in
-  snd (List.find (fun o -> fst o == op) prelude_uop) ll (next_target_label ())
+  snd
+    (List.find (fun o -> fst o == op) prelude_uop)
+    ll
+    ("r" ^ next_global_counter_value ())
 
-let build_load var ibuilder = L.build_load var (next_target_label ()) ibuilder
+let build_load var ibuilder =
+  L.build_load var ("r" ^ next_global_counter_value ()) ibuilder
+
+let build_append_block name fun_def_ll =
+  L.append_block mc_context (name ^ next_global_counter_value ()) fun_def_ll
 
 let build_store var value ibuilder =
   let value =
@@ -70,6 +81,26 @@ let build_store var value ibuilder =
     else value
   in
   L.build_store value var ibuilder
+
+let build_call f params ibuilder =
+  let ret_typekind =
+    (* f is a pointer to a function that return something *)
+    L.classify_type (L.return_type (L.element_type (L.type_of f)))
+  in
+  match ret_typekind with
+  | L.TypeKind.Void -> L.build_call f (Array.of_list params) "" ibuilder
+  | _ ->
+      L.build_call f (Array.of_list params)
+        ("r" ^ next_global_counter_value ())
+        ibuilder
+
+let build_in_bounds_gep base_ll indexes ibuilder =
+  L.build_in_bounds_gep base_ll indexes
+    ("gep" ^ next_global_counter_value ())
+    ibuilder
+
+let build_alloca typ_ll id ibuilder = L.build_alloca typ_ll id ibuilder
+(* --------------- LLVM utils --------------------- *)
 
 let debug_typekind typekind =
   let tks =
@@ -98,31 +129,16 @@ let debug_typekind typekind =
   in
   List.assoc typekind tks
 
-let build_call f params ibuilder =
-  let ret_typekind =
-    (* f is a pointer to a function that return something *)
-    L.classify_type (L.return_type (L.element_type (L.type_of f)))
-  in
-  (* let _ =
-       Printf.printf "\nreturn kind %s\n" (snd (debug_typekind ret_typekind))
-     in *)
-  match ret_typekind with
-  | L.TypeKind.Void -> L.build_call f (Array.of_list params) "" ibuilder
-  | _ -> L.build_call f (Array.of_list params) (next_target_label ()) ibuilder
-
+(* given an address of something, return that something *)
 let get_value_at_addr ibuilder addr =
   match L.classify_type (L.element_type (L.type_of addr)) with
-  (* it's a reference, no need to load it *)
+  (* it's already a reference to a block of contiguous elements, there is no need to load anything *)
   | L.TypeKind.Array -> addr
   (* load from memory *)
   | _ -> build_load addr ibuilder
 
-let to_null_if_llvalue_undef v =
-  if L.is_undef v then L.const_pointer_null (L.pointer_type (L.type_of v))
-  else v
-
 (* call 'add ibuilder' if the current block doesn't have a terminal *)
-let add_terminal ibuilder add =
+let add_terminal_block ibuilder add =
   match L.block_terminator (L.insertion_block ibuilder) with
   | Some _ -> ()
   | None -> add ibuilder |> ignore
@@ -147,7 +163,7 @@ let evaluate_const_expr expr =
   in
   let prelude_const_uop = [ (Not, L.const_not); (Neg, L.const_neg) ] in
   let rec aux expr =
-    match remove_node_annotations expr with
+    match remove_node_annotation expr with
     | ILiteral i -> L.const_int int_ll i
     | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
     | CLiteral c -> L.const_int char_ll (int_of_char c)
@@ -158,9 +174,12 @@ let evaluate_const_expr expr =
   in
   aux expr
 
-(* in general should_ret_value = true for rhs (read operations), false for lhs (write operations) *)
+(* --------------- code generation --------------------- *)
+
+(* in general, should_ret_value indicates if we want the value or the address of something and
+   it is true for read operations, false for write operations *)
 let rec codegen_expression gamma ibuilder expr should_ret_value =
-  match remove_node_annotations expr with
+  match remove_node_annotation expr with
   | ILiteral i -> L.const_int int_ll i
   | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
   | CLiteral c -> L.const_int char_ll (int_of_char c)
@@ -190,7 +209,8 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
                 (* param is a pointer to an array, cast it into a pointer to the data STORED into the array *)
                 (L.pointer_type
                    (L.element_type (L.element_type (L.type_of param))))
-                (next_target_label ()) ibuilder
+                (next_global_counter_value ())
+                ibuilder
             else param)
           params
       in
@@ -209,12 +229,17 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
         exprs
 
 and codegen_access gamma ibuilder acc should_ret_value =
-  match remove_node_annotations acc with
+  match remove_node_annotation acc with
   | AccVar id ->
       let addr = Symbol_table.lookup id gamma in
+      (* are we interested on the value of the symbol id (to read from it) or in its address (to write into it)? *)
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccIndex (base, index) ->
-      (* true/false does not matter if base is an array because them are specially handled, it matters if base would be a pointer from a decayed array parameter and should be true because we want the pointer to the elements of the array, not the addres of the decayed pointer *)
+      (*
+        true/false does not matter if base is an array because they are specially handled by get_value_at_addr,
+        it matters if base would be a pointer from a decayed array parameter and should be true
+        because we want the pointer to the elements of the array, not the address in memory of the decayed pointer
+      *)
       let base_ll = codegen_access gamma ibuilder base true in
       let index_ll = codegen_expression gamma ibuilder index true in
       (* base_ll could be a pointer to an array or just a pointer from a decayed array parameter *)
@@ -222,22 +247,22 @@ and codegen_access gamma ibuilder acc should_ret_value =
       let addr =
         match L.classify_type base_ll_t with
         | L.TypeKind.Array ->
-            L.build_in_bounds_gep base_ll
+            build_in_bounds_gep base_ll
               [| L.const_int int_ll 0; index_ll |]
-              (next_target_label ()) ibuilder
+              ibuilder
         | _ ->
             (* if a parameter was declared as an array, it has just decayed into a pointer *)
-            L.build_in_bounds_gep base_ll [| index_ll |] (next_target_label ())
-              ibuilder
+            build_in_bounds_gep base_ll [| index_ll |] ibuilder
       in
+      (* are we interested on the value of a[i] (to read from it) or in its address (to write into it)? *)
       if should_ret_value then get_value_at_addr ibuilder addr else addr
   | AccDeref expr ->
       let ptr = codegen_expression gamma ibuilder expr true in
-      (* the value of the pointer is the address of another var *)
+      (* are we interested on the value of *p (to read from it) or in its address (to write into it)? *)
       if should_ret_value then get_value_at_addr ibuilder ptr else ptr
 
 let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
-  match remove_node_annotations stmt with
+  match remove_node_annotation stmt with
   | Block stmt_list ->
       let block_gamma = Symbol_table.begin_block gamma in
       let _ =
@@ -262,28 +287,22 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
   | If (cond, then_stmt, else_stmt) ->
       let cond_ll = codegen_expression gamma ibuilder cond true in
       (* create empty blocks for then, else and the last merge *)
-      let then_block =
-        L.append_block mc_context ("then" ^ next_target_label ()) fun_def_ll
-      in
-      let else_block =
-        L.append_block mc_context ("else" ^ next_target_label ()) fun_def_ll
-      in
-      let merge_block =
-        L.append_block mc_context ("merge" ^ next_target_label ()) fun_def_ll
-      in
+      let then_block = build_append_block "then" fun_def_ll in
+      let else_block = build_append_block "else" fun_def_ll in
+      let merge_block = build_append_block "merge" fun_def_ll in
       let _ =
-        (* generate code for the then statement, then insert it into the then block *)
+        (* generate code for the then statement, and insert it into the then block *)
         (* add br to the merge block if the then block does not return *)
-        add_terminal
+        add_terminal_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context then_block)
              then_stmt)
           (L.build_br merge_block)
       in
-      (* generate code for the else statement, else insert it into the else block *)
+      (* generate code for the else statement, and insert it into the else block *)
       (* add br to the merge block if the else block does not return *)
       let _ =
-        add_terminal
+        add_terminal_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context else_block)
              else_stmt)
@@ -295,23 +314,17 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       let _ = L.position_at_end merge_block ibuilder in
       ibuilder
   | While (cond, stmt) ->
-      let condition_block =
-        L.append_block mc_context ("cond" ^ next_target_label ()) fun_def_ll
-      in
-      let body_block =
-        L.append_block mc_context ("body" ^ next_target_label ()) fun_def_ll
-      in
-      let merge_block =
-        L.append_block mc_context ("merge" ^ next_target_label ()) fun_def_ll
-      in
+      let condition_block = build_append_block "cond" fun_def_ll in
+      let body_block = build_append_block "body" fun_def_ll in
+      let merge_block = build_append_block "merge" fun_def_ll in
 
       (* jump to the condition *)
       let _ = L.build_br condition_block ibuilder in
 
-      (* generate code for the body statement, else insert it into the body block *)
+      (* generate code for the body statement, and insert it into the body block *)
       (* add br to the condition block if the body block does not return *)
       let _ =
-        add_terminal
+        add_terminal_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context body_block)
              stmt)
@@ -330,28 +343,32 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       ibuilder
 
 and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
-  match remove_node_annotations stmtordec with
+  match remove_node_annotation stmtordec with
   | Dec inits ->
       let _ =
         List.iter
           (fun (typ, id, init_exprs) ->
             let typ_ll = from_ast_type typ in
-            let var = L.build_alloca typ_ll id ibuilder in
+            let var = build_alloca typ_ll id ibuilder in
             let _ =
-              (* handle init list int a[] = {1, 2, 3} *)
+              (* handle init list *)
               match init_exprs with
-              | [] -> ( match typ with TypA _ -> () | _ -> ())
+              (* empty init list *)
+              | [] -> ()
+              (* an init list with just one element *)
               | expr :: [] ->
                   let expr_ll = codegen_expression gamma ibuilder expr true in
                   let addr =
                     match typ with
                     | TypA _ ->
-                        L.build_in_bounds_gep var
+                        build_in_bounds_gep var
                           [| L.const_int int_ll 0; Llvm.const_int int_ll 0 |]
-                          (next_target_label ()) ibuilder
+                          ibuilder
+                    (* int a = {1} is just fine *)
                     | _ -> var
                   in
                   build_store addr expr_ll ibuilder |> ignore
+              (* an init list with more than one element *)
               | exprs ->
                   let exprs_ll =
                     List.map
@@ -359,12 +376,13 @@ and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
                       exprs
                   in
                   let _ =
+                    (* build a store for each element *)
                     List.fold_left
                       (fun i expr_ll ->
                         let addr =
-                          L.build_in_bounds_gep var
+                          build_in_bounds_gep var
                             [| L.const_int int_ll 0; Llvm.const_int int_ll i |]
-                            (next_target_label ()) ibuilder
+                            ibuilder
                         in
                         let _ = build_store addr expr_ll ibuilder in
                         i + 1)
@@ -380,7 +398,9 @@ and codegen_stmtordec fun_def_ll gamma ibuilder stmtordec =
   | Stmt stmt -> codegen_stmt fun_def_ll gamma ibuilder stmt
 
 let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
+  (* LLVM return type *)
   let fun_ret_typ_ll = from_ast_type typ in
+  (* LLVM formals' type *)
   let formals_typ_ll =
     List.map
       (fun (typ, id) ->
@@ -389,33 +409,43 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
         | _ -> (from_ast_type typ, id))
       formals
   in
+  (* LLVM function type *)
   let fun_typ_ll =
     L.function_type fun_ret_typ_ll (Array.of_list (List.map fst formals_typ_ll))
   in
+  (* the LLVM function *)
   let fun_def_ll = L.define_function fname fun_typ_ll llmodule in
+  (* add it to the global scope*)
   let _ = Symbol_table.add_entry fname fun_def_ll gamma in
   fun () ->
+    (* instance of the instructions builder for this function *)
     let ibuilder = L.builder_at_end mc_context (L.entry_block fun_def_ll) in
+    (* the function scope *)
     let fun_gamma = Symbol_table.begin_block gamma in
     let _ =
+      (* insert parameters into it *)
       List.fold_left
         (fun i (typ_ll, id) ->
-          let param_addr_ll = L.build_alloca typ_ll id ibuilder in
+          let param_addr_ll = build_alloca typ_ll id ibuilder in
           let i_param_ll = L.param fun_def_ll i in
           let _ = build_store param_addr_ll i_param_ll ibuilder in
           let _ = Symbol_table.add_entry id param_addr_ll fun_gamma in
           i + 1)
         0 formals_typ_ll
     in
-    let _ = target_register_counter := 0 in
-    add_terminal (codegen_stmt fun_def_ll fun_gamma ibuilder body) (fun ib ->
+    (* reset the global counter to 0 to start the names for instructions builders from 0 inside the body *)
+    let _ = reset_global_counter_value () in
+    (* a return block could be missing *)
+    add_terminal_block (codegen_stmt fun_def_ll fun_gamma ibuilder body)
+      (fun ibuilder ->
         match typ with
-        | TypV -> L.build_ret_void ib
-        | t -> L.build_ret (L.undef fun_ret_typ_ll) ib)
+        | TypV -> L.build_ret_void ibuilder
+        | t -> L.build_ret (L.undef fun_ret_typ_ll) ibuilder)
 
 let codegen_topdecl global topdecl llmodule =
-  match remove_node_annotations topdecl with
+  match remove_node_annotation topdecl with
   | Fundecl f -> codegen_fundecl global f llmodule
+  (* only costants and constants expression are supported for globals *)
   | Vardec inits ->
       let _ =
         List.iter
@@ -423,14 +453,20 @@ let codegen_topdecl global topdecl llmodule =
             let typ_ll = from_ast_type typ in
             let llvalue =
               L.define_global id
+                (* handle init list *)
                 (match init_exprs with
+                (* empty init list *)
                 | [] -> L.const_null typ_ll
+                (* an init list with just one element *)
                 | expr :: [] -> (
                     match typ with
                     | TypA _ ->
                         L.const_array (L.element_type typ_ll)
                           [| evaluate_const_expr expr |]
-                    | _ -> evaluate_const_expr expr)
+                    (* int a = {1} is just fine *)
+                    | _ ->
+                        evaluate_const_expr expr
+                        (* an init list with more than one element *))
                 | exprs ->
                     L.const_array (L.element_type typ_ll)
                       (Array.of_list (List.map evaluate_const_expr exprs)))
