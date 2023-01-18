@@ -1,5 +1,4 @@
 open Ast
-open Symbol_table
 module L = Llvm
 
 (* The LLVM global context *)
@@ -27,7 +26,7 @@ let rec from_ast_type = function
 
 (* --------------- generic utils --------------------- *)
 let remove_node_annotation annotated_node =
-  match annotated_node with { loc; node } -> node
+  match annotated_node with { loc = _; node } -> node
 
 let global_counter = ref 0
 
@@ -102,7 +101,7 @@ let build_in_bounds_gep base_ll indexes ibuilder =
 let build_alloca typ_ll id ibuilder = L.build_alloca typ_ll id ibuilder
 
 (* --------------- LLVM utils --------------------- *)
-
+(*
 let debug_typekind typekind =
   let tks =
     [
@@ -129,6 +128,7 @@ let debug_typekind typekind =
     ]
   in
   List.assoc typekind tks
+*)
 
 (* given an address of something, return that something *)
 let get_value_at_addr ibuilder addr =
@@ -441,7 +441,7 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
       (fun ibuilder ->
         match typ with
         | TypV -> L.build_ret_void ibuilder
-        | t -> L.build_ret (L.undef fun_ret_typ_ll) ibuilder)
+        | _ -> L.build_ret (L.undef fun_ret_typ_ll) ibuilder)
 
 let codegen_topdecl global topdecl llmodule =
   match remove_node_annotation topdecl with

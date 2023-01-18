@@ -47,7 +47,7 @@ let raise_semantic_error code_position msg =
   raise (Semantic_error (code_position, msg))
 
 let remove_node_annotations annotated_node =
-  match annotated_node with { loc; node } -> node
+  match annotated_node with { loc = _; node } -> node
 
 (* --------------- symbol table utils --------------------- *)
 

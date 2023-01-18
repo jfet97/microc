@@ -8,7 +8,7 @@ cd _mc_build
 
 clang -emit-llvm -c ../bin/rt-support.c &&
 
-dune exec --profile release ../bin/microcc.exe -- ../$1 &&
+dune exec ../bin/microcc.exe -- ../$1 &&
 
 llvm-link rt-support.bc a.bc -o output.bc &&
 

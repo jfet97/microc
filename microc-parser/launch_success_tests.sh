@@ -1,6 +1,6 @@
 #! /bin/bash
 
-# do dune exec --profile release ./test/codegen_test.exe -- $FILE
+# do dune exec ./test/codegen_test.exe -- $FILE
 
 for FILE in test/samples/success/*;
 do echo -----------------------------------------------------------
