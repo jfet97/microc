@@ -9,7 +9,7 @@ let empty_table = SymbolTable []
 let begin_block st =
   match st with SymbolTable l -> SymbolTable (List.cons (Hashtbl.create 1) l)
 
-(* useless because of immutability *)
+(* useless because of immutability of lists *)
 let end_block st = match st with SymbolTable l -> SymbolTable (List.tl l)
 
 let add_entry i t st =

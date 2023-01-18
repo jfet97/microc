@@ -100,6 +100,7 @@ let build_in_bounds_gep base_ll indexes ibuilder =
     ibuilder
 
 let build_alloca typ_ll id ibuilder = L.build_alloca typ_ll id ibuilder
+
 (* --------------- LLVM utils --------------------- *)
 
 let debug_typekind typekind =

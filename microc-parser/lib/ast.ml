@@ -88,7 +88,7 @@ and topdecl_node =
 
 type program = Prog of topdecl list [@@deriving show]
 
-(* pretty print *)
+(* --------------- pretty print --------------------- *)
 
 let ( |+| ) s1 s2 = String.concat "" [ s1; s2 ]
 
