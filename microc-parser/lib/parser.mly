@@ -8,6 +8,12 @@
   type vardesc_desc = VarDescStar | VarDescParens | VarDescArr of int option;;
 
   let (|@|) node loc = { Ast.node = node; Ast.loc = loc }
+
+  let from_vardesc_to_ast_type typ vardesc = 
+    match vardesc with
+      | VarDescStar -> Ast.TypP typ
+      | VarDescParens -> typ
+      | VarDescArr osize -> Ast.TypA (typ, osize)
 %}
 
 /* Tokens declarations */
@@ -84,15 +90,10 @@ topdecl:
 vardecl:
   | typ vardesc
     { 
-      let ftvd t vd = 
-        match vd with
-          | VarDescStar -> Ast.TypP t
-          | VarDescParens -> t
-          | VarDescArr oi -> Ast.TypA (t, oi)
-      in
-      let tt = List.fold_left ftvd $1 (snd $2)
+      (* create a proper AST from any possible var description *)
+      let typ = List.fold_left from_vardesc_to_ast_type $1 (snd $2)
       (* type, id *)
-      in (tt, fst $2)
+      in (typ, fst $2)
     }
   ;
 
@@ -106,30 +107,27 @@ assign_expr:
 vardecl_init_list:
   | typ separated_nonempty_list(COMMA, pair(vardesc, option(assign_expr))) SEMICOLON
     { 
-      let ftvd t vd = 
-        match vd with
-          | VarDescStar -> Ast.TypP t
-          | VarDescParens -> t
-          | VarDescArr oi -> Ast.TypA (t, oi)
-      in
+      (* do for each declared variable *)
       List.map (fun vinit -> 
         let vdesc = fst vinit in
         let init_exprs = match snd vinit with | None -> [] | Some ae -> ae in
-        let tt_temp = List.fold_left ftvd $1 (snd vdesc) in
+        (* create a proper AST from any possible var description *)
+        let typ = List.fold_left from_vardesc_to_ast_type $1 (snd vdesc) in
         (* set array length if there is a non-empty initializer list and the length were not already set *)
-        let tt = (
-          match tt_temp with 
-          | Ast.TypA(t, oi) -> (
-            match oi with
-              | Some _ -> tt_temp
+        let typ = (
+          match typ with 
+          | Ast.TypA(t, osize) -> (
+            match osize with
+              | Some _ -> typ
               | None -> 
                 let init_exprs_len = List.length init_exprs in
-                if init_exprs_len == 0 then tt_temp
+                if init_exprs_len == 0 then typ
                 else Ast.TypA(t, Some(init_exprs_len))
           )
-          | _ -> tt_temp
+          | _ -> typ
         )
-        in (tt, fst vdesc, init_exprs)
+        (* type, id, init exprs *)
+        in (typ, fst vdesc, init_exprs)
       ) $2
     }
   ;
@@ -147,6 +145,7 @@ typ:
 vardesc:
   | ID
     { ($1, []) }
+  (* recursively collect var descriptions *)
   | STAR vardesc
     { (fst $2, VarDescStar :: snd $2) }
   | LEFT_PAREN vardesc RIGHT_PAREN
