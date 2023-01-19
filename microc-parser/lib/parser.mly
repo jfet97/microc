@@ -5,15 +5,17 @@
 %{
 
   (* Auxiliary definitions *)
-  type vardesc_desc = VarDescStar | VarDescParens | VarDescArr of int option;;
+  type vardesc_typ = VarDescStar | VarDescParens | VarDescArr of int option;;
 
-  let (|@|) node loc = { Ast.node = node; Ast.loc = loc }
-
-  let from_vardesc_to_ast_type typ vardesc = 
-    match vardesc with
+  let from_vardesc_to_ast_type typ vardesc_t = 
+    match vardesc_t with
       | VarDescStar -> Ast.TypP typ
       | VarDescParens -> typ
       | VarDescArr osize -> Ast.TypA (typ, osize)
+
+  let (|@|) node loc = { Ast.node = node; Ast.loc = loc }
+
+  
 %}
 
 /* Tokens declarations */
@@ -113,7 +115,7 @@ vardecl_init_list:
         let init_exprs = match snd vinit with | None -> [] | Some ae -> ae in
         (* create a proper AST from any possible var description *)
         let typ = List.fold_left from_vardesc_to_ast_type $1 (snd vdesc) in
-        (* set array length if there is a non-empty initializer list and the length were not already set *)
+        (* set array length if there is a non-empty initializer list and the length were not already declared *)
         let typ = (
           match typ with 
           | Ast.TypA(t, osize) -> (
@@ -145,7 +147,7 @@ typ:
 vardesc:
   | ID
     { ($1, []) }
-  (* recursively collect var descriptions *)
+  (* recursively collect var desriptors *)
   | STAR vardesc
     { (fst $2, VarDescStar :: snd $2) }
   | LEFT_PAREN vardesc RIGHT_PAREN

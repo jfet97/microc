@@ -326,7 +326,7 @@ and typecheck_expression gamma expr =
                 (* the function doesn't take other parameters but there are still left arguments: KO *)
                 | _ ->
                     raise_semantic_error expr.loc
-                      ("Too many arguments for function" ^ id)
+                      ("Too many arguments for function " ^ id)
               else
                 raise_semantic_error expr.loc
                   ("Wrong argument type when calling " ^ id ^ ": expected a "
