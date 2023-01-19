@@ -103,6 +103,8 @@ La symbol table è una lista immutabile di hashmap mutabili, una per ogni scope 
 
 È stata definita anche la funzione `print_keys` per stampare gli identificatori presenti in ogni livello della lista.
 
+<br>
+
 ## Semantic analysis
 
 Nel file di analisi semantica troviamo l'implementazione del type system. Vengono definiti i tipi delle entità manipolate dal linguaggio e una utility di conversione dalle annotazioni di tipo presenti sull'AST. È interessante notare che il tipo delle funzioni è soggetto a currying. Ad esempio un tipo funzione come `int f(int a, bool b)` diventa `int -> bool -> int`, mentre un tipo funzione come `int f()` diventa `void -> int`. Poter trattare un parametro alla volta si rivela molto agevole in fase di type checking delle chiamate a funzione.
@@ -129,3 +131,23 @@ Le possibili casistiche sono le seguenti:
 La rilevazione di dead code avviene proprio in quest'ultima situazione: se uno statement in un blocco termina con certezza e sono presenti altri statement dopo di esso, tali statement non potranno mai essere eseguiti.
 
 È necessario spendere alcune parole anche sulla logica di type checking delle dichiarazioni di funzione. Durante il processo viene creato un nuovo scope nel quale vengono inseriti i parametri dopo gli opportuni controlli, il tipo della funzione viene generato tramite currying dei parametri come citato prima e la dichiarazione della funzione viene aggiunta allo scope globale. Il type checking del corpo della funzione viene invece posticipato, poiché in esso potrebbe essere presente l'invocazione di una o più funzioni dichiarate più avanti nel file `.mc`. Questa posticipazione consiste semplicemente nell'inserire il controllo del corpo all'interno di una closure che sarà invocata in un secondo momento, dopo l'analisi delle dichiarazioni di tutte le funzioni presenti nel file.
+
+<br>
+
+## Code generation
+
+Nel file dedicato alla code generation troviamo tutte le funzioni, principali e secondarie, necessarie allo scopo. Troviamo immediatamente le definizioni dei tipi base secondo LLVM e una funzione di trasformazione dalle annotazioni di tipo nell'AST verso i tipi LLVM. Troviamo poi un contatore globale per assicurare nomi univoci da dare alle varie operazioni di costruzione delle istruzioni, contatore azzerato all'inizio di ogni funzione. Le varie funzioni `build_*` che seguono sono dei semplici wrapper attorno ai binding di ocaml alle primitive di LLVM che sfruttano indirettamente tale contatore.
+
+In generale il codice generato fa un estensivo uso di operazioni da e verso la memoria principale: ogni volta che una variabile deve essere aggiornata viene immediatamente sovrascritta tramite una store, e ogni volta che una variabile deve essere letta verrà inserita una load corrispondente. Sebbene questo semplifichi concettualmente la generazione del codice, ad esempio non è mai necessario l'uso di una phi function, questo modo di procedere causa inevitabilmente un certo grado di inefficienza. Si lascia però la questione in mano alle varie fasi di ottimizzazione.
+
+Incontriamo poi la funzione `get_value_at_addr`, la quale si occupa, dato l'indirizzo in memoria di una variabile, di ottenere il corrispondente valore costruendo una load. L'eccezione sono gli array, per i quali non ha senso caricare alcunché dalla memoria. Un array in quanto indirizzo del blocco contiguo di memoria è tutto ciò di cui c'è bisogno per i casi in cui il type system ne permette l'utilizzo.
+
+Sono quindi presenti altre funzioni di ulitità, come quella per aggiungere una istruzione terminatrice ai blocchi che ne sono eventualmente sprovvisti, e una funzione per la valutazione di espressioni costanti.
+
+Si passa quindi alle funzioni che generano il codice a partire dall'AST. I parametri Per quanto riguarda le espressioni, in particolare gli accessi alle variabili, le dereferenziazioni e gli accessi alle celle degli array, il risultato cambia se l'accesso derivava da una operazione di scrittura, ne qual caso richiediamo l'indirizzo, o in lettura, nel qual caso richiediamo il valore. Ecco che le funzioni generatrici del codice per le espressioni, `codegen_expression`, e per gli accessi, `codegen_access`, richiedono un parametro aggiuntivo, `should_ret_value`, che funge da discriminante tra le due casistiche.\
+L'accesso a una cella di un array è più delicato del previsto in quanto i parametri array di una funzione vengono fatti decadere, in stile C, a puntatori, perciò è necessario discriminare ulteriormente in tale situazione.
+
+Per quanto riguarda la generazione del codice degli statement essa è piuttosto standard, articolata in determinate situazioni come la dichiarazione delle variabili locali o globali, ma senza particolari sorprese concettuali. Per quanto riguarda la generazione del codice delle funzioni si utilizza lo stesso procedimento dell'analisi semantica: prima viene generato il minimo indispensabile per poter inserire nella symbol table ogni funzione dichiarata, e poi si passa alla code generation dei corpi la quale viene rimandata sempre grazie a una closure.
+
+undef void
+parla della symbol table per parametri e variabili locali

@@ -139,7 +139,7 @@ let get_value_at_addr ibuilder addr =
   | _ -> build_load addr ibuilder
 
 (* call 'add ibuilder' if the current block doesn't have a terminal *)
-let add_terminal_block ibuilder add =
+let add_terminal_to_block ibuilder add =
   match L.block_terminator (L.insertion_block ibuilder) with
   | Some _ -> ()
   | None -> add ibuilder |> ignore
@@ -186,7 +186,7 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
   | CLiteral c -> L.const_int char_ll (int_of_char c)
   | Null -> L.undef void_ll
   | Access acc -> codegen_access gamma ibuilder acc should_ret_value
-  (* &a -> i want a address *)
+  (* &a -> i want the address of a *)
   | Addr acc -> codegen_access gamma ibuilder acc false
   | UnaryOp (uop, op) ->
       let value = codegen_expression gamma ibuilder op true in
@@ -197,7 +197,6 @@ let rec codegen_expression gamma ibuilder expr should_ret_value =
       build_bop bop value1 value2 ibuilder
   | Call (f, params) ->
       let f_ll = Symbol_table.lookup f gamma in
-
       let params_ll =
         List.map
           (fun param_ll ->
@@ -294,7 +293,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       let _ =
         (* generate code for the then statement, and insert it into the then block *)
         (* add br to the merge block if the then block does not return *)
-        add_terminal_block
+        add_terminal_to_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context then_block)
              then_stmt)
@@ -303,7 +302,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       (* generate code for the else statement, and insert it into the else block *)
       (* add br to the merge block if the else block does not return *)
       let _ =
-        add_terminal_block
+        add_terminal_to_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context else_block)
              else_stmt)
@@ -325,7 +324,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       (* generate code for the body statement, and insert it into the body block *)
       (* add br to the condition block if the body block does not return *)
       let _ =
-        add_terminal_block
+        add_terminal_to_block
           (codegen_stmt fun_def_ll gamma
              (L.builder_at_end mc_context body_block)
              stmt)
@@ -418,6 +417,8 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
   let fun_def_ll = L.define_function fname fun_typ_ll llmodule in
   (* add it to the global scope*)
   let _ = Symbol_table.add_entry fname fun_def_ll gamma in
+
+  (* delay code generation of the body *)
   fun () ->
     (* instance of the instructions builder for this function *)
     let ibuilder = L.builder_at_end mc_context (L.entry_block fun_def_ll) in
@@ -437,7 +438,7 @@ let codegen_fundecl gamma { typ; fname; formals; body } llmodule =
     (* reset the global counter to 0 to start the names for instructions builders from 0 inside the body *)
     let _ = reset_global_counter_value () in
     (* a return block could be missing *)
-    add_terminal_block (codegen_stmt fun_def_ll fun_gamma ibuilder body)
+    add_terminal_to_block (codegen_stmt fun_def_ll fun_gamma ibuilder body)
       (fun ibuilder ->
         match typ with
         | TypV -> L.build_ret_void ibuilder
