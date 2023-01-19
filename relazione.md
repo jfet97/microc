@@ -128,4 +128,4 @@ Le possibili casistiche sono le seguenti:
 
 La rilevazione di dead code avviene proprio in quest'ultima situazione: se uno statement in un blocco termina con certezza e sono presenti altri statement dopo di esso, tali statement non potranno mai essere eseguiti.
 
-È necessario spendere alcune parole anche sulla logica di type checking delle dichiarazioni di funzione. 
+È necessario spendere alcune parole anche sulla logica di type checking delle dichiarazioni di funzione. Durante il processo viene creato un nuovo scope nel quale vengono inseriti i parametri dopo gli opportuni controlli, il tipo della funzione viene generato tramite currying dei parametri come citato prima e la dichiarazione della funzione viene aggiunta allo scope globale. Il type checking del corpo della funzione viene invece posticipato, poiché in esso potrebbe essere presente l'invocazione di una o più funzioni dichiarate più avanti nel file `.mc`. Questa posticipazione consiste semplicemente nell'inserire il controllo del corpo all'interno di una closure che sarà invocata in un secondo momento, dopo l'analisi delle dichiarazioni di tutte le funzioni presenti nel file.

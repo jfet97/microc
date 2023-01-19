@@ -479,7 +479,7 @@ let typecheck_topdeclaration gamma topdecl =
             ()
       | _ ->
           raise_semantic_error topdecl.loc
-            (* currently the language itself does not accept functions that do not return  void, int, bool, char *)
+            (* actually the parser itself does not accept functions that do not return  oid, int, bool, char *)
             "A function can only return void, int, bool, char")
   | Vardec inits ->
       let _ = check_declaration gamma inits topdecl.loc true in
@@ -493,7 +493,7 @@ let type_check p =
       let _ = Symbol_table.add_entry "print" (TFun (TInt, TVoid)) global in
 
       (* check and store functions' declarations in the global environment *)
-      let delayed_bodies_check =
+      let delayed_bodies_to_check =
         List.map
           (fun topdecl -> typecheck_topdeclaration global topdecl)
           program
@@ -503,5 +503,5 @@ let type_check p =
           "Missing main function"
       in
       (* check functions' bodies *)
-      let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_check in
+      let _ = List.iter (fun d -> d () |> ignore) delayed_bodies_to_check in
       p
