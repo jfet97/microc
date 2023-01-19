@@ -13,7 +13,7 @@ type ttype =
   | TNull
   | TPtr of ttype
   | TArray of ttype * int option
-  (* currying: argument, return *)
+  (* currying: one argument, return type *)
   | TFun of ttype * ttype
 [@@deriving show]
 
@@ -24,20 +24,24 @@ let rec from_ast_type t =
   | Ast.TypV -> TVoid
   | Ast.TypC -> TChar
   | Ast.TypP tt -> TPtr (from_ast_type tt)
-  | Ast.TypA (bt, oi) -> TArray (from_ast_type bt, oi)
+  | Ast.TypA (bt, osize) -> TArray (from_ast_type bt, osize)
 
 (* "equality", maybe just assignability *)
-let rec check_type_equality t1 t2 =
+let rec check_type_equality_aux t1 t2 call =
   match (t1, t2) with
   | TFun (tp1, tr1), TFun (tp2, tr2) ->
-      check_type_equality tp1 tp2 && check_type_equality tr1 tr2
+      check_type_equality_aux tp1 tp2 call
+      && check_type_equality_aux tr1 tr2 call
   | TArray (ta1, Some size1), TArray (ta2, Some size2) ->
-      size1 == size2 && check_type_equality ta1 ta2
-  | TArray (ta1, _), TArray (ta2, _) -> check_type_equality ta1 ta2
-  | TPtr tp1, TPtr tp2 -> check_type_equality tp1 tp2
+      call && size1 == size2 && check_type_equality_aux ta1 ta2 call
+  | TArray (ta1, _), TArray (ta2, _) ->
+      call && check_type_equality_aux ta1 ta2 call
+  | TPtr tp1, TPtr tp2 -> check_type_equality_aux tp1 tp2 call
   | TPtr _, TNull | TNull, TPtr _ -> true
   | x, y -> if x = y then true else false
 
+let check_type_equality t1 t2 = check_type_equality_aux t1 t2 false
+let check_type_equality_callsite t1 t2 = check_type_equality_aux t1 t2 true
 let is_type_array t = match t with TArray (_, _) -> true | _ -> false
 let is_type_fun t = match t with TFun (_, _) -> true | _ -> false
 
@@ -317,7 +321,7 @@ and typecheck_expression gamma expr =
           (* at least one argument left and the function takes at least one more argument: check types and recur *)
           | TFun (param_typ, ret_typ), arg :: args ->
               let arg_typ = typecheck_expression gamma arg in
-              if check_type_equality param_typ arg_typ then
+              if check_type_equality_callsite param_typ arg_typ then
                 match (ret_typ, args) with
                 (* the function takes other parameters: recur with the remaining args *)
                 | TFun _, _ -> check_args ret_typ args
