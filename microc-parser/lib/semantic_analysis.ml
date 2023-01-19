@@ -342,6 +342,7 @@ and typecheck_expression gamma expr =
         check_args fun_typ args
       else raise_semantic_error expr.loc (id ^ " is not a function")
   | Comma exprs ->
+      (* return the type of the last expression *)
       List.fold_left
         (fun _ expr -> typecheck_expression gamma expr)
         (* TVoid is just a spurious initial type because exprs is at least of length 2 *)
@@ -428,7 +429,7 @@ let rec typecheck_statement gamma stmt expected_ret_type is_function_block =
                 expected_ret_type)
           false stmt_list
       in
-      (* a block returns if the last statement returns, whatever it is *)
+      (* a block returns iff the last executable statement returns *)
       there_is_ret
 
 (* return unit instead of tvoid *)

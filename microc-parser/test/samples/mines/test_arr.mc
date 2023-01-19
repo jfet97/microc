@@ -7,7 +7,6 @@ int f (int a[3]) {
 int main()
 {    
     int a[] = {1,2,3};
-    
     f(a);
 
     return 0;
