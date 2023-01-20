@@ -6,7 +6,7 @@ for FILE in test/samples/success/*;
 do echo -----------------------------------------------------------
 echo $FILE:
 source "compile.sh" $FILE
-read -n 1 -s
 echo -----------------------------------------------------------
-echo
+echo press any char to "continue"
+read -n 1 -s
 done

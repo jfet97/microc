@@ -5,4 +5,4 @@ compilare
 3) llvm-link rt-support.bc a.bc -o output.bc
 4) llc -filetype=obj output.bc
 5) clang output.o -o a.out
-6) a.out
+6) ./a.out

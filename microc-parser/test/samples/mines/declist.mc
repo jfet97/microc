@@ -4,11 +4,7 @@ int main() {
   print(1);
   int art = {}; // okay perché lo vede come senza init
   int ajjkk = {1}; // è okay davvero perché funziona in C
-  int a = 23, b, *c = NULL, *e = c, /* f = getint(), */ array[] = {9,3,4};
-
-  int f;
-  f = getint();
-  print(f);
+  int a = 23, b, *c = NULL, *e = c, f = getint(), array[] = {9,3,4};
 
   print(2);
 

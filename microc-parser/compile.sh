@@ -20,6 +20,6 @@ llc -filetype=obj output.bc &&
 
 clang output.o -o a.out &&
 
-timeout 15s ./a.out
+timeout --foreground 15s ./a.out
 
 cd $CURR_DIR

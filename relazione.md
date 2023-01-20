@@ -164,6 +164,13 @@ Sono state implementate le seguenti estensioni:
 
 I test forniti sono stati suddivisi in due cartelle: `samples/fail` per i test che dovrebbero fallire, `samples/success` per i test che dovrebbero terminare con successo. Di questi ultimi, i test `test-ops2.mc` e `test-return1.mc` hanno subito delle modifiche evidenziate tramite commenti: il primo a causa di un uso errato dell'operatore di pre-decremento, il secondo a causa della presenza di dead code rilevato dall'analisi statica. Invece, i test presenti nella cartella `samples/mines` sono test aggiuntivi scritti per provare diverse funzionalità.
 
+È possibile compilare ed eseguire un qualsiasi programma tramite lo script bash `compile.sh`:
+
+```sh
+bash compile.sh test/samples/path/to/file.mc [COMPILER_OPTIONS]
+```
+
+Lo script imposta un timeout all'esecuzione dei programmi per supportare i cicli infiniti. Sono infatti presenti altri due script bash, `launch_failing_tests.sh` e `launch_success_tests.sh`, che eseguono rispettivamente tutti i test case fallimentari e tutti i test case che dovrebbero compilare e girare con successo. In quest'ultimo caso in particolare è presente il file `test-ex7.mc` che contiene un ciclo infinito. Il test case `test-ex24.mc` invece è solo molto lento nel calcolo della funzione di Ackermann e il terzo ouput impiega un po' ad arrivare. Per passare da un test all'altro è necessario premere un qualsiasi carattere.
 
 compile launch test
 
