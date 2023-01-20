@@ -1,13 +1,16 @@
 int main() {
-  int i;
+  int i = 0;
   while(i < 10) {
     i = i + 1;
     print(i);
   }
 
-  for(;;) print(i);
+  int a = getint();
+  int b = getint();
 
-  for(i = 10;;) print(i);
+  for(i = 0; i < 10; i++) print(i);
+
+  for(;false;) print(i);
 
   if(a > b) 4; else 5;
 

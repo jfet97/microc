@@ -19,9 +19,12 @@ let rec from_ast_type = function
   | TypA (typ, i) -> (
       let tp = from_ast_type typ in
       match i with None -> L.pointer_type tp | Some i -> L.array_type tp i)
-  | TypP typ ->
+  | TypP typ -> (
       let tp = from_ast_type typ in
-      L.pointer_type tp
+      match L.classify_type tp with
+      (* LLVM does not support void pointers *)
+      | L.TypeKind.Void -> L.pointer_type int_ll
+      | _ -> L.pointer_type tp)
   | TypV -> void_ll
 
 (* --------------- generic utils --------------------- *)
