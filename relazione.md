@@ -71,7 +71,7 @@ Lo scanner non presenta particolari differenze rispetto a quanto visto a lezione
 
 ## Parser
 
-Il parser utilizza le API monolitiche di menhir, dichiara tutti i token necessari e fa estensivo uso della precedenza assegnabile per risolvere la maggior parte dei conflitti tra regole, come ad esempio il classico problema degli if-then. Per risolvere altre situazioni conflittuali è stato fatto uso del modificatore `%inline` oppure di una appropriata riscrittura delle produzioni, non sempre intuitiva, per evitare le ambiguità.
+Il parser utilizza le API monolitiche di Menhir, dichiara tutti i token necessari e fa estensivo uso della precedenza assegnabile ad essi per risolvere la maggior parte dei conflitti tra regole, come ad esempio il classico problema degli if-then. Per risolvere altre situazioni conflittuali è stato fatto uso del modificatore `%inline` oppure di una appropriata riscrittura delle produzioni, non sempre intuitiva, per evitare le ambiguità.
 
 Tra le definizioni ausiliarie troviamo:
 
@@ -81,7 +81,7 @@ Tra le definizioni ausiliarie troviamo:
 
 Poiché vi è il supporto a la dichiarazione di variabili con inizializzazione opzionale e dichiarazioni multiple è stata creata una produzione apposita, `vardecl_init_list`, che si cura di generare l'AST corrispondente dopo aver costruito il tipo di ogni dichiarazione con `from_vardesc_to_ast_type`.
 
-Il supporto al comma operator rasenta quello del linguaggio C ma è leggermente meno potente. È stata inserita una produzione apposita, `expr_comma`, che lo supporta, a differenza della classica `expr`. Il problema che si è voluto risolvere creando questa distinzione riguardava i conflitti sorti con l'invocazione di funzioni e la lista di inizializzazione degli array, luoghi nei quali compaiono espressioni intervallate da virgole. In queste situazioni è stata imposta la produzione `expr`, che non supporta il comma operator tra le alternative immediate, mentre in tutti gli altri luoghi viene fatto uso della produzione `expr_comma`.
+Il supporto al comma operator rasenta quello del linguaggio C ma è leggermente meno potente. È stata inserita una produzione apposita, `expr_comma`, che lo contiene come sotto-produzione, a differenza della classica `expr`. Il problema che si è voluto risolvere creando questa distinzione riguardava i conflitti sorti con l'invocazione di funzioni e la lista di inizializzazione degli array, luoghi nei quali compaiono espressioni intervallate da virgole. In queste situazioni è stata imposta la produzione `expr`, che non contiene il comma operator tra le alternative immediate, mentre in tutti gli altri luoghi viene fatto uso della produzione `expr_comma`.
 
 Il parser riconosce i cicli `for` e il ciclo `do-while`, ma effettua una operazione di riscrittura di questi ultimi nel ciclo `while`. Altre operazioni di riscrittura sono state eseguite per gli operatori di pre- e post-decremento, tramite il comma operator, e per le abbreviazioni degli assignment operator, che vengono espanse.
 
@@ -115,29 +115,29 @@ Proseguendo troviamo due utility che si occupano di interagire con la symbol tab
 
 Le funzioni `check_variable_type` e `check_parameter_type` si occupano di rilevare invece dichiarazioni di variabili o parametri di funzione prive di significato o non supportate, come una variabile avente tipo `void` o array multidimensionali. Non è supportata la dichiarazione di puntatori ad array, come ad esempio un `int (*p)[3]`.
 
-Dopodiché inizia la parte dedicata al type checking vero e proprio, con funzioni adette al controllo mutuamente ricorsivo delle varie parti dell'AST. Questa sezione, sebbene sia abbastanza estesa, è piuttosto standard.\
+Dopodiché inizia la parte dedicata al type checking vero e proprio, con funzioni adette al controllo mutuamente ricorsivo delle varie parti dell'AST. Questa sezione, sebbene sia abbastanza estesa, è piuttosto standard.
+
 La funzione `check_declaration` esegue il type checking delle dichiarazioni di variabili locali e globali con annessa eventuale inizializzazione. Il linguaggio supporta l'inizializzazione di variabili scalari tramite assegnazione diretta di un valore e di array tramite lista di inizializzazione. Tramite apposita riscrittura del parser, il linguaggio è in grado di inferire la size di un array dalla lista di inizializzazione, se essa è non vuota. Una lista di inizializzazione vuota significa nessuna inizializzazione, è supportata ma in tal caso è obbligatorio specificare la size dell'array. È possibile utilizzare la lista di inizializzazione anche per variabili scalari, a patto che tale lista sia vuota, significante nessuna inizializzazione, oppure contenente un solo elemento.
 
 La funzione `typecheck_statement`, per il type checking ricorsivo degli statement, utilizza due parametri aggiuntivi, `expected_ret_type` e `is_function_block`, per conoscere quale è il tipo dichiarato come tipo di ritorno della funzione contenente lo statement e per sapere se l'antenato diretto dello statement nell'AST era proprio la funzione. Il primo parametro è utile per il type checking dei valori restituiti, il secondo ha valenza solo nel caso di un `block` che normalmente è tenuto a generare un nuovo scope, ma non se è il diretto discendente di una funzione, la quale ha già provveduto alla creazione di un nuovo scope nel quale sono stati inseriti i parametri formali.
 
-La funzione `typecheck_statement` è stata arricchita per poter rilevare anche la presenza di dead code. Sebbene la logica utilizzata sia abbastanza semplice, si è dimostrata efficace nel rilevare la presenza di dead code nei file di test `test-return1.mc`, `fail-dead1.mc` e `file-dead2.mc`. La funzione restituisce `true` nel caso in cui vi è la certezza che lo statement provochi la fuoriuscita dalla funzione nella quale è inserito, mentre se restituisce `false` lo statement potrebbe comunque "ritornare" oppure no. La proprietà da controllare in sé è ovviamente indecidibile, ma un punto di miglioria potrebbe essere quello di rilevare la presenza di condizioni costanti nei costrutti `if` e nel costrutto `while` (ricordiamo che `for` e `do-while` vengono trasformati in `while`).\
+La funzione `typecheck_statement` è stata arricchita per poter rilevare anche la presenza di dead code. Sebbene la logica utilizzata sia abbastanza semplice, si è dimostrata efficace nel rilevare la presenza di dead code nei file di test `test-return1.mc`, `fail-dead1.mc` e `file-dead2.mc`. La funzione restituisce `true` nel caso in cui vi è la certezza che lo statement provochi la fuoriuscita dalla funzione nella quale è inserito, mentre se restituisce `false` lo statement potrebbe comunque "ritornare" oppure no. La proprietà da controllare in sé è ovviamente indecidibile, ma un possibile miglioramento è sicuramente quello di rilevare la presenza di condizioni costanti nei costrutti `if` e nel costrutto `while` (ricordiamo che `for` e `do-while` vengono trasformati in `while`).
+
 Le possibili casistiche sono le seguenti:
 
 * `if`, tale costrutto termina sicuramente la funzione se e solo se entrambe le diramazioni terminano
 * `while`, questo costrutto non termina mai con certezza la funzione poiché anche se il suo corpo terminasse, la condizione potrebbe essere immediatamente falsa (questa è una marcata sotto-approssimazione migliorabile tramite l'analisi delle condizioni)
 * `expression`, un expression-statement di per sé non può terminare la funzione
 * `return`, un return statement certamente termina la funzione
-* `block`, una sequenza di statement termina la funzione con certezza solo se uno di essi termina con certezza
+* `block`, una sequenza di statement termina la funzione con certezza solo se almeno uno di essi termina con certezza
 
 La rilevazione di dead code avviene proprio in quest'ultima situazione: se uno statement in un blocco termina con certezza e sono presenti altri statement dopo di esso, tali statement non potranno mai essere eseguiti.
 
 È necessario spendere alcune parole anche sulla logica di type checking delle dichiarazioni di funzione. Durante il processo viene creato un nuovo scope nel quale vengono inseriti i parametri dopo gli opportuni controlli, il tipo della funzione viene generato tramite currying dei parametri come citato prima e la dichiarazione della funzione viene aggiunta allo scope globale. Il type checking del corpo della funzione viene invece posticipato, poiché in esso potrebbe essere presente l'invocazione di una o più funzioni dichiarate più avanti nel file `.mc`. Questa posticipazione consiste semplicemente nell'inserire il controllo del corpo all'interno di una closure che sarà invocata in un secondo momento, dopo l'analisi delle dichiarazioni di tutte le funzioni presenti nel file.
 
-<br>
-
 ## Code generation
 
-Nel file dedicato alla code generation troviamo tutte le funzioni, principali e secondarie, necessarie allo scopo. Troviamo immediatamente le definizioni dei tipi base secondo LLVM e una funzione di trasformazione dalle annotazioni di tipo nell'AST verso i tipi LLVM. Troviamo poi un contatore globale per assicurare nomi univoci da dare alle varie operazioni di costruzione delle istruzioni, contatore azzerato all'inizio di ogni funzione. Le varie funzioni `build_*` che seguono sono dei semplici wrapper attorno ai binding di ocaml alle primitive di LLVM che sfruttano indirettamente tale contatore.
+Nel file dedicato alla code generation troviamo tutte le funzioni, principali e secondarie, necessarie allo scopo. Troviamo immediatamente le definizioni dei tipi base secondo LLVM e una funzione di trasformazione dalle annotazioni di tipo nell'AST verso i tipi LLVM. Troviamo poi un contatore globale per assicurare nomi univoci da dare alle varie operazioni di costruzione delle istruzioni, contatore azzerato all'inizio della costruzione di ogni funzione. Le varie funzioni `build_*` sfruttano indirettamente tale contatore, e sono dei semplici wrapper attorno ai binding di ocaml alle primitive di LLVM.
 
 In generale il codice generato fa un estensivo uso di operazioni da e verso la memoria principale: ogni volta che una variabile deve essere aggiornata viene immediatamente sovrascritta tramite una store, e ogni volta che una variabile deve essere letta verrà inserita una load corrispondente. Sebbene questo semplifichi concettualmente la generazione del codice, ad esempio non è mai necessario l'uso di una phi function, questo modo di procedere causa inevitabilmente un certo grado di inefficienza. Si lascia però la questione in mano alle varie fasi di ottimizzazione. Come per l'analisi semantica viene fatto uso di una symbol table, suddivisa in scope, nella quale immagazzinare l'indirizzo in memoria delle varie variabili e funzioni dichiarate nel programma, come anche dei parametri formali di queste ultime.
 
@@ -145,7 +145,7 @@ Incontriamo poi la funzione `get_value_at_addr`, la quale si occupa, dato l'indi
 
 Sono quindi presenti altre funzioni di ulitità, come quella per aggiungere una istruzione terminatrice ai blocchi che ne sono eventualmente sprovvisti, e una funzione per la valutazione di espressioni costanti.
 
-Si passa quindi alle funzioni che generano il codice a partire dall'AST. I parametri Per quanto riguarda le espressioni, in particolare gli accessi alle variabili, le dereferenziazioni e gli accessi alle celle degli array, il risultato cambia se l'accesso derivava da una operazione di scrittura, ne qual caso richiediamo l'indirizzo, o in lettura, nel qual caso richiediamo il valore. Ecco che le funzioni generatrici del codice per le espressioni, `codegen_expression`, e per gli accessi, `codegen_access`, richiedono un parametro aggiuntivo, `should_ret_value`, che funge da discriminante tra le due casistiche.
+Si passa quindi alle funzioni che generano il codice a partire dall'AST. Per quanto riguarda le espressioni, in particolare gli accessi alle variabili, le dereferenziazioni e gli accessi alle celle degli array, il risultato cambia se l'accesso derivava da una operazione di scrittura, ne qual caso richiediamo l'indirizzo, o in lettura, nel qual caso richiediamo il valore. Ecco che le funzioni generatrici del codice per le espressioni, `codegen_expression`, e per gli accessi, `codegen_access`, richiedono un parametro aggiuntivo, `should_ret_value`, che funge da discriminante tra le due casistiche.
 
 L'accesso a una cella di un array è più delicato del previsto in quanto i parametri array di una funzione vengono fatti decadere, in stile C, a puntatori, perciò è necessario discriminare ulteriormente in tale situazione.
 
@@ -156,7 +156,7 @@ Per quanto riguarda la generazione del codice degli statement essa è piuttosto 
 Sono state implementate le seguenti estensioni:
 
 * operatori di pre/post incremento/decremento, ovvero `++` and `--`, e le abbreviazioni degli assignment operator `+=`, `-=`, `*=`, `/=` e `%=`
-* ciclo `do-while`, dichiarazione di variabili con inizializzazione e dichiarazioni multiple come `int i = 0, *j = &z;``
+* ciclo `do-while`, dichiarazione di variabili con inizializzazione e dichiarazioni multiple come `int i = 0, *j = &z;`
 * rilevazione del dead code
 * comma operator
 
@@ -174,4 +174,4 @@ Lo script imposta un timeout all'esecuzione dei programmi per supportare i cicli
 
 ## Documentation
 
-La documentazione pare non essere generabile con il comando presente nel Makefile, poiché viene generata completamente vuota. Probabilmente il problema sta nel fatto che il package contenente l'intero progetto è privato, non pubblico. È stato quindi modificato il Makefile per supportare la generazione di documentazione per progetti privati, ma ho dovuto "hardcodare" un path specifico e non sono sicuro funzioni ovunque. Ad ogni modo non è stata seguita la convenzione dei commenti `odoc`, perciò la documentazione generata non offre un gran valore aggiunto rispetto alla lettura del codice sorgente.
+La documentazione pare non essere generabile con il comando presente nel Makefile, poiché viene generata completamente vuota. Probabilmente il problema sta nel fatto che il package contenente l'intero progetto è privato, non pubblico. È stato quindi modificato il Makefile per supportare la generazione di documentazione per progetti privati, ma ho dovuto "hardcodare" un path specifico e non sono sicuro funzioni ovunque. Ad ogni modo non è stata seguita la convenzione dei commenti `odoc`, e i commenti risiedono completamente nei file `.ml`, perciò la documentazione generata non offre un gran valore aggiunto rispetto alla lettura del codice sorgente.
