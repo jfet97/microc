@@ -29,9 +29,17 @@ clean: ## Clean build artifacts and other generated files
 doc: ## Generate odoc documentation
 	opam exec -- dune build --root . @doc
 
+.PHONY: docp
+docp: ## Generate odoc documentation
+	opam exec -- dune build --root . @doc-private
+
 .PHONY: servedoc
 servedoc: doc ## Open odoc documentation with default web browser
 	open _build/default/_doc/_html/index.html
+
+.PHONY: servedocp
+servedocp: docp ## Open odoc documentation with default web browser
+	open _build/default/_doc/_html/microc@36d05ba512a9/Microc/index.html
 
 .PHONY: fmt
 fmt: ## Format the codebase with ocamlformat

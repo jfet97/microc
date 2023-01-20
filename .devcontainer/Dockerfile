@@ -3,7 +3,7 @@
 # [Choice] Debian OS version (use bullseye on local arm64/Apple Silicon): buster, bullseye
 
 FROM arm64v8/ubuntu:latest
-RUN apt update -y && apt install -y software-properties-common
+RUN apt update -y && apt install software-properties-common -y
 RUN add-apt-repository ppa:avsm/ppa
 RUN apt install -y ocaml opam python3 cmake llvm llvm-14-dev
 RUN opam init --auto-setup --yes
@@ -14,3 +14,4 @@ RUN opam install dune -y
 RUN opam install utop -y
 RUN apt install clang -y
 RUN opam install odoc -y
+# RUN apt install xdg-utils -y

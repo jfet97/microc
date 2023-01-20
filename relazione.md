@@ -172,6 +172,6 @@ bash compile.sh test/samples/path/to/file.mc [COMPILER_OPTIONS]
 
 Lo script imposta un timeout all'esecuzione dei programmi per supportare i cicli infiniti. Sono infatti presenti altri due script bash, `launch_failing_tests.sh` e `launch_success_tests.sh`, che eseguono rispettivamente tutti i test case fallimentari e tutti i test case che dovrebbero compilare e girare con successo. In quest'ultimo caso in particolare è presente il file `test-ex7.mc` che contiene un ciclo infinito. Il test case `test-ex24.mc` invece è solo molto lento nel calcolo della funzione di Ackermann e il terzo ouput impiega un po' ad arrivare. Per passare da un test all'altro è necessario premere un qualsiasi carattere.
 
-compile launch test
+## Documentation
 
-documentazione
+La documentazione pare non essere generabile con il comando presente nel Makefile, poiché viene generata completamente vuota. Probabilmente il problema sta nel fatto che il package contenente l'intero progetto è privato, non pubblico. È stato quindi modificato il Makefile per supportare la generazione di documentazione per progetti privati, ma ho dovuto "hardcodare" un path specifico e non sono sicuro funzioni ovunque. Ad ogni modo non è stata seguita la convenzione dei commenti `odoc`, perciò la documentazione generata non offre un gran valore aggiunto rispetto alla lettura del codice sorgente.
