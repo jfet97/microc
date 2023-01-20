@@ -286,6 +286,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       in
       ibuilder
   | If (cond, then_stmt, else_stmt) ->
+      (* build the condition *)
       let cond_ll = codegen_expression gamma ibuilder cond true in
       (* create empty blocks for then, else and the last merge *)
       let then_block = build_append_block "then" fun_def_ll in
@@ -309,9 +310,9 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
              else_stmt)
           (L.build_br merge_block)
       in
-      (* build the conditional *)
+      (* handle the result of the test of the condition *)
       let _ = L.build_cond_br cond_ll then_block else_block ibuilder in
-      (* move the builder at the end of the merge block *)
+      (* move the ibuilder at the end of the merge block *)
       let _ = L.position_at_end merge_block ibuilder in
       ibuilder
   | While (cond, stmt) ->
@@ -319,7 +320,7 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
       let body_block = build_append_block "body" fun_def_ll in
       let merge_block = build_append_block "merge" fun_def_ll in
 
-      (* jump to the condition *)
+      (* set a jump to the condition *)
       let _ = L.build_br condition_block ibuilder in
 
       (* generate code for the body statement, and insert it into the body block *)
@@ -334,8 +335,11 @@ let rec codegen_stmt fun_def_ll gamma ibuilder stmt =
 
       (* build the expression and the condition inside the condition block *)
       let merge_block_builder = L.builder_at_end mc_context condition_block in
+      (* test the condition *)
       let cond_ll = codegen_expression gamma merge_block_builder cond true in
       let _ =
+        (* handle the result of the previous test by setting the jumps to do
+           body of the while if false, out of the while if true *)
         L.build_cond_br cond_ll body_block merge_block merge_block_builder
       in
 

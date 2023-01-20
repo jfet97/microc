@@ -151,11 +151,20 @@ L'accesso a una cella di un array è più delicato del previsto in quanto i para
 
 Per quanto riguarda la generazione del codice degli statement essa è piuttosto standard, articolata in determinate situazioni come la dichiarazione delle variabili locali o globali, ma senza particolari sorprese concettuali. Nella generazione del codice delle funzioni si utilizza lo stesso procedimento dell'analisi semantica: prima viene generato il minimo indispensabile per poter inserire nella symbol table ogni funzione dichiarata e poi si passa alla code generation dei corpi, la quale era stata rimandata sempre grazie ad una closure.
 
-undef void
+## Language extension
+
+Sono state implementate le seguenti estensioni:
+
+* operatori di pre/post incremento/decremento, ovvero `++` and `--`, e le abbreviazioni degli assignment operator `+=`, `-=`, `*=`, `/=` e `%=`
+* ciclo `do-while`, dichiarazione di variabili con inizializzazione e dichiarazioni multiple come `int i = 0, *j = &z;``
+* rilevazione del dead code
+* comma operator
+
+## Test
+
+I test forniti sono stati suddivisi in due cartelle: `samples/fail` per i test che dovrebbero fallire, `samples/success` per i test che dovrebbero terminare con successo. Di questi ultimi, i test `test-ops2.mc` e `test-return1.mc` hanno subito delle modifiche evidenziate tramite commenti: il primo a causa di un uso errato dell'operatore di pre-decremento, il secondo a causa della presenza di dead code rilevato dall'analisi statica. Invece, i test presenti nella cartella `samples/mines` sono test aggiuntivi scritti per provare diverse funzionalità.
 
 
-cose opzionali
 compile launch test
-quali test hai modificato
-quali test hai aggiunto
+
 documentazione
