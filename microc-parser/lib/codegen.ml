@@ -144,7 +144,7 @@ let add_terminal_to_block ibuilder add =
   | Some _ -> ()
   | None -> add ibuilder |> ignore
 
-let evaluate_const_expr expr =
+let evaluate_const_expr expr typ_ll =
   let prelude_const_bop =
     [
       (Add, L.const_add);
@@ -168,6 +168,7 @@ let evaluate_const_expr expr =
     | ILiteral i -> L.const_int int_ll i
     | BLiteral b -> L.const_int bool_ll (if b then 1 else 0)
     | CLiteral c -> L.const_int char_ll (int_of_char c)
+    | Null -> L.const_null typ_ll
     | UnaryOp (op, expr) -> List.assoc op prelude_const_uop (aux expr)
     | BinaryOp (bop, expr1, expr2) ->
         List.assoc bop prelude_const_bop (aux expr1) (aux expr2)
@@ -463,15 +464,19 @@ let codegen_topdecl global topdecl llmodule =
                 | expr :: [] -> (
                     match typ with
                     | TypA _ ->
-                        L.const_array (L.element_type typ_ll)
-                          [| evaluate_const_expr expr |]
+                        let el_typ_ll = L.element_type typ_ll in
+                        L.const_array el_typ_ll
+                          [| evaluate_const_expr expr el_typ_ll |]
                     (* it could be 'T a = T_val' or 'T a = {T_val}' *)
-                    | _ ->
-                        evaluate_const_expr expr
-                        (* an init list with more than one element *))
+                    | _ -> evaluate_const_expr expr typ_ll)
                 | exprs ->
-                    L.const_array (L.element_type typ_ll)
-                      (Array.of_list (List.map evaluate_const_expr exprs)))
+                    (* an init list with more than one element *)
+                    let el_typ_ll = L.element_type typ_ll in
+                    L.const_array el_typ_ll
+                      (Array.of_list
+                         (List.map
+                            (fun expr -> evaluate_const_expr expr el_typ_ll)
+                            exprs)))
                 llmodule
             in
             let _ = Symbol_table.add_entry id llvalue global in
